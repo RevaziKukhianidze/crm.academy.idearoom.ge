@@ -170,7 +170,7 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
   ) => {
     setFormData((prev) => {
       const updatedContent = [...prev.syllabus_content];
-      
+
       // Initialize the array for this title if it doesn't exist
       if (!updatedContent[titleIndex]) {
         updatedContent[titleIndex] = [];
@@ -186,7 +186,7 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
   const addSyllabusContentItem = (titleIndex: number) => {
     setFormData((prev) => {
       const updatedContent = [...prev.syllabus_content];
-      
+
       // Initialize if needed
       if (!updatedContent[titleIndex]) {
         updatedContent[titleIndex] = [];
@@ -206,7 +206,10 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
     setFormData((prev) => {
       const updatedContent = [...prev.syllabus_content];
 
-      if (updatedContent[titleIndex] && updatedContent[titleIndex].length > contentIndex) {
+      if (
+        updatedContent[titleIndex] &&
+        updatedContent[titleIndex].length > contentIndex
+      ) {
         // Remove the item at contentIndex
         updatedContent[titleIndex].splice(contentIndex, 1);
 
@@ -477,7 +480,9 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
       for (let i = 0; i < updatedSyllabusContent.length; i++) {
         if (updatedSyllabusContent[i]) {
           // Filter out empty items in each inner array
-          updatedSyllabusContent[i] = updatedSyllabusContent[i].filter((item) => item.trim() !== "");
+          updatedSyllabusContent[i] = updatedSyllabusContent[i].filter(
+            (item) => item.trim() !== ""
+          );
           // If the inner array is empty after filtering, add a placeholder
           if (updatedSyllabusContent[i].length === 0) {
             updatedSyllabusContent[i] = [""];
@@ -504,9 +509,7 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(
-          errorData.error || "შეთავაზების შენახვა ვერ მოხერხდა"
-        );
+        throw new Error(errorData.error || "შეთავაზების შენახვა ვერ მოხერხდა");
       }
 
       // Redirect to courses page on success
@@ -514,9 +517,7 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
     } catch (err) {
       console.error("Form submission error:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "შეთავაზების შენახვა ვერ მოხერხდა"
+        err instanceof Error ? err.message : "შეთავაზების შენახვა ვერ მოხერხდა"
       );
       setIsSubmitting(false);
     }
@@ -648,15 +649,13 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="lesson_time">
-                  გაკვეთილის დრო
-                </Label>
+                <Label htmlFor="lesson_time">გაკვეთილის ხანგრძლივობა</Label>
                 <Input
                   id="lesson_time"
                   name="lesson_time"
                   value={formData.lesson_time || ""}
                   onChange={handleChange}
-                  placeholder="მაგალითად: ორშაბათი 19:00"
+                  placeholder="მაგალითად: 2"
                   className="border-blue-200"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -665,15 +664,13 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="start_course">
-                  კურსის დაწყების თარიღი
-                </Label>
+                <Label htmlFor="start_course">კურსის დაწყების თარიღი</Label>
                 <Input
                   id="start_course"
                   name="start_course"
                   value={formData.start_course || ""}
                   onChange={handleChange}
-                  placeholder="მაგალითად: 5 აპრილი"
+                  placeholder="მაგალითად: იანვარი"
                   className="border-blue-200"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -722,9 +719,6 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
                         <>
                           <Upload className="h-10 w-10 mb-2" />
                           <p>დააჭირეთ სურათის ასატვირთად</p>
-                          <p className="text-xs mt-1">
-                            გამოსაყენებელი ფორმატები: JPG, PNG, GIF
-                          </p>
                         </>
                       )}
                     </div>
@@ -994,38 +988,40 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
                 <div className="pl-4 border-l-2 border-muted space-y-3">
                   <Label>სილაბუსის შინაარსი</Label>
 
-                  {formData.syllabus_content[titleIndex]?.map((content, contentIndex) => (
-                    <div
-                      key={`content-${titleIndex}-${contentIndex}`}
-                      className="flex gap-2"
-                    >
-                      <Textarea
-                        value={content}
-                        onChange={(e) =>
-                          handleSyllabusContentChange(
-                            titleIndex,
-                            contentIndex,
-                            e.target.value
-                          )
-                        }
-                        placeholder="შინაარსი"
-                        rows={2}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          removeSyllabusContentItem(titleIndex, contentIndex)
-                        }
-                        disabled={
-                          formData.syllabus_content[titleIndex]?.length === 1
-                        }
+                  {formData.syllabus_content[titleIndex]?.map(
+                    (content, contentIndex) => (
+                      <div
+                        key={`content-${titleIndex}-${contentIndex}`}
+                        className="flex gap-2"
                       >
-                        <X size={16} />
-                      </Button>
-                    </div>
-                  ))}
+                        <Textarea
+                          value={content}
+                          onChange={(e) =>
+                            handleSyllabusContentChange(
+                              titleIndex,
+                              contentIndex,
+                              e.target.value
+                            )
+                          }
+                          placeholder="შინაარსი"
+                          rows={2}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            removeSyllabusContentItem(titleIndex, contentIndex)
+                          }
+                          disabled={
+                            formData.syllabus_content[titleIndex]?.length === 1
+                          }
+                        >
+                          <X size={16} />
+                        </Button>
+                      </div>
+                    )
+                  )}
 
                   {
                     <Button
