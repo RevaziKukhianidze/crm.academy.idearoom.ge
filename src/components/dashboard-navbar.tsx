@@ -16,8 +16,10 @@ import {
   LogOut,
   LayoutDashboard,
   GraduationCap,
+  Sliders,
 } from "lucide-react";
 import { ThemeToggle } from "./ui/theme-toggle";
+import { usePathname } from "next/navigation";
 
 interface DashboardNavbarProps {
   handleLogOut: () => void;
@@ -26,6 +28,12 @@ interface DashboardNavbarProps {
 export default function DashboardNavbar({
   handleLogOut,
 }: DashboardNavbarProps) {
+  const pathname = usePathname();
+
+  const isActive = (path: string) => {
+    return pathname.startsWith(path);
+  };
+
   return (
     <nav className="w-full border-b border-border bg-background py-4 sticky top-0 z-50 backdrop-blur-sm bg-background/80">
       <div className="container mx-auto px-4 flex justify-between items-center">
@@ -40,33 +48,64 @@ export default function DashboardNavbar({
           <div className="flex gap-4 ml-8">
             <Link
               href="/dashboard"
-              className="text-sm font-medium hover:text-primary flex items-center gap-1 transition-colors"
+              className={`text-sm font-medium ${
+                pathname === "/dashboard"
+                  ? "text-primary"
+                  : "text-foreground/70 hover:text-primary"
+              } flex items-center gap-1 transition-colors`}
             >
               მთავარი
             </Link>
             <Link
               href="/dashboard/blogs"
-              className="text-sm font-medium hover:text-primary flex items-center gap-1 transition-colors"
+              className={`text-sm font-medium ${
+                isActive("/dashboard/blogs")
+                  ? "text-primary"
+                  : "text-foreground/70 hover:text-primary"
+              } flex items-center gap-1 transition-colors`}
             >
               ბლოგები
             </Link>
             <Link
               href="/dashboard/courses"
-              className="text-sm font-medium hover:text-primary flex items-center gap-1 transition-colors"
+              className={`text-sm font-medium ${
+                isActive("/dashboard/courses")
+                  ? "text-primary"
+                  : "text-foreground/70 hover:text-primary"
+              } flex items-center gap-1 transition-colors`}
             >
               კურსები
             </Link>
             <Link
               href="/dashboard/lecturer"
-              className="text-sm font-medium hover:text-primary flex items-center gap-1 transition-colors"
+              className={`text-sm font-medium ${
+                isActive("/dashboard/lecturer")
+                  ? "text-primary"
+                  : "text-foreground/70 hover:text-primary"
+              } flex items-center gap-1 transition-colors`}
             >
               ლექტორები
             </Link>
             <Link
               href="/dashboard/offers"
-              className="text-sm font-medium hover:text-primary flex items-center gap-1 transition-colors"
+              className={`text-sm font-medium ${
+                isActive("/dashboard/offers")
+                  ? "text-primary"
+                  : "text-foreground/70 hover:text-primary"
+              } flex items-center gap-1 transition-colors`}
             >
               შეთავაზებები
+            </Link>
+            <Link
+              href="/dashboard/sliders"
+              className={`text-sm font-medium ${
+                isActive("/dashboard/sliders")
+                  ? "text-primary"
+                  : "text-foreground/70 hover:text-primary"
+              } flex items-center gap-1 transition-colors`}
+            >
+              <Sliders className="h-4 w-4 mr-1" />
+              სლაიდერი
             </Link>
           </div>
         </div>
