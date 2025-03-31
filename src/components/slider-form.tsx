@@ -23,18 +23,24 @@ import { Upload, Image as ImageIcon } from "lucide-react";
 import Image from "next/image";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+// Define an offered course interface with only the properties we need
+interface CourseItem {
+  id: number;
+  title: string;
+}
+
 interface FormValues {
   title: string;
   text: string;
   image: string;
-  button_link: string;
+  course_id: string | null; // Added course_id instead of button_link
 }
 
 interface SliderData {
   title: string | null;
   text: string | null;
   image: string | null;
-  button_link: string | null;
+  course_id: number | null; // Changed from button_link to course_id
 }
 
 interface SliderFormProps {
@@ -49,41 +55,9 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [base64Image, setBase64Image] = useState<string | null>(null);
+  const [courses, setCourses] = useState<CourseItem[]>([]);
+  const [matchingCourse, setMatchingCourse] = useState<CourseItem | null>(null);
   const isEditMode = !!sliderId;
-
-  // Check Supabase configuration
-  useEffect(() => {
-    // Debug Supabase configuration
-    console.log(
-      "Supabase URL defined:",
-      !!process.env.NEXT_PUBLIC_SUPABASE_URL
-    );
-    console.log(
-      "Supabase Anon Key defined:",
-      !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
-
-    // Check if we're logged in with Supabase (might help with RLS issues)
-    const checkAuth = async () => {
-      try {
-        const supabase = await createClient();
-        const { data, error } = await supabase.auth.getSession();
-        console.log("Auth session exists:", !!data.session);
-        if (error) {
-          console.error("Auth error:", error);
-        }
-        if (!data.session) {
-          console.warn(
-            "No authenticated session found - this may cause RLS policy violations"
-          );
-        }
-      } catch (e) {
-        console.error("Error checking auth:", e);
-      }
-    };
-
-    checkAuth();
-  }, []);
 
   // Initialize form
   const form = useForm<FormValues>({
@@ -91,17 +65,223 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
       title: "",
       text: "",
       image: "",
-      button_link: "",
+      course_id: null, // Initialize as null
     },
   });
 
+  // Fetch courses to match with slider title
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        // ✨ შევამოწმოთ თუ SUPABASE_URL და ANON_KEY არსებობს
+        console.log(
+          "NEXT_PUBLIC_SUPABASE_URL არსებობს:",
+          !!process.env.NEXT_PUBLIC_SUPABASE_URL
+        );
+        console.log(
+          "NEXT_PUBLIC_SUPABASE_ANON_KEY არსებობს:",
+          !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        );
+
+        const supabase = await createClient();
+        console.log("✨ იწყება course ცხრილიდან მონაცემების მოთხოვნა...");
+
+        const { data, error } = await supabase
+          .from("courses") // შეცვლილია: offered_course → course
+          .select("id, title")
+          .order("title", { ascending: true });
+
+        if (error) {
+          console.error("Error fetching courses:", error);
+          return;
+        }
+
+        console.log(`✅ მოიძებნა ${data?.length || 0} კურსი:`, data);
+
+        // დამატებითი შემოწმება - გამოვბეჭდოთ ყველა კურსის სახელი და ID
+        if (data && data.length > 0) {
+          console.log("კურსების სია:");
+          data.forEach((course, index) => {
+            console.log(
+              `${index + 1}. ID: ${course.id}, სათაური: "${course.title}"`
+            );
+          });
+        } else {
+          console.log("⚠️ ყურადღება: course ცხრილში კურსები არ მოიძებნა!");
+        }
+
+        setCourses(data || []);
+      } catch (err) {
+        console.error("Error fetching courses:", err);
+      }
+    };
+
+    fetchCourses();
+  }, []);
+
+  // Watch title changes to update course_id
+  const currentTitle = form.watch("title");
+
+  useEffect(() => {
+    if (currentTitle && currentTitle.trim()) {
+      const trimmedTitle = currentTitle.trim();
+      console.log("ამჟამინდელი სათაური:", trimmedTitle);
+      console.log("სათაურის სიგრძე:", trimmedTitle.length);
+      console.log(
+        "სათაურის კოდი:",
+        Array.from(trimmedTitle).map((c) => c.charCodeAt(0))
+      );
+
+      // Log all courses for debugging
+      if (courses.length > 0) {
+        console.log(`მოძიებულია ${courses.length} კურსი შესადარებლად`);
+      } else {
+        console.log(
+          "⚠️ კურსები არ არის ხელმისაწვდომი შესადარებლად. ცხრილი ცარიელია?"
+        );
+      }
+
+      // Log each comparison attempt for debugging
+      let foundMatch = false;
+
+      courses.forEach((course) => {
+        const courseTitle = course.title.toLowerCase();
+        const currentTitleLower = trimmedTitle.toLowerCase();
+
+        console.log(`შედარება: "${currentTitleLower}" === "${courseTitle}"`);
+        console.log(`კურსის სათაურის სიგრძე: ${courseTitle.length}`);
+        console.log(`ჩემი სათაურის სიგრძე: ${currentTitleLower.length}`);
+
+        if (courseTitle === currentTitleLower) {
+          console.log("✅ ზუსტი დამთხვევა!");
+          foundMatch = true;
+        } else {
+          // შევამოწმოთ რატომ არ ემთხვევა
+          const commonLength = Math.min(
+            courseTitle.length,
+            currentTitleLower.length
+          );
+          let firstDifferenceIndex = -1;
+
+          for (let i = 0; i < commonLength; i++) {
+            if (courseTitle[i] !== currentTitleLower[i]) {
+              firstDifferenceIndex = i;
+              break;
+            }
+          }
+
+          if (firstDifferenceIndex >= 0) {
+            console.log(`განსხვავება პოზიციაზე ${firstDifferenceIndex}:`);
+            console.log(
+              `  კურსი: "${courseTitle[firstDifferenceIndex]}" (კოდი: ${courseTitle.charCodeAt(firstDifferenceIndex)})`
+            );
+            console.log(
+              `  ჩემი:  "${currentTitleLower[firstDifferenceIndex]}" (კოდი: ${currentTitleLower.charCodeAt(firstDifferenceIndex)})`
+            );
+          } else if (courseTitle.length !== currentTitleLower.length) {
+            console.log("სიგრძეები განსხვავდება.");
+          }
+        }
+      });
+
+      if (!foundMatch) {
+        console.log("❌ კურსების გადარჩევა დასრულდა, დამთხვევა ვერ მოიძებნა");
+      }
+
+      // Look for exact match (case-insensitive)
+      const matchedCourse = courses.find(
+        (course) =>
+          course.title.trim().toLowerCase() === trimmedTitle.toLowerCase()
+      );
+
+      if (matchedCourse) {
+        console.log("✅ ნაპოვნია ზუსტი დამთხვევა:", matchedCourse);
+        setMatchingCourse(matchedCourse);
+        // Set course_id when we find a match
+        console.log("Setting course_id to:", matchedCourse.id);
+        form.setValue("course_id", String(matchedCourse.id));
+        return; // ვიპოვეთ, გამოვდივართ
+      }
+
+      // თუ ზუსტი დამთხვევა ვერ მოიძებნა, ვცადოთ ალტერნატიული მეთოდები
+      console.log(
+        "👀 ზუსტი დამთხვევა ვერ მოიძებნა, ვცდილობთ ალტერნატიულ მეთოდებს..."
+      );
+
+      // მეთოდი 1: შევამოწმოთ სპეციალური სიმბოლოების გარეშე
+      const normalizedCurrentTitle = trimmedTitle
+        .toLowerCase()
+        .replace(/[\s\-_,.]+/g, "") // Remove spaces, dashes, underscores
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, ""); // Remove diacritics
+
+      for (const course of courses) {
+        const normalizedCourseTitle = course.title
+          .trim()
+          .toLowerCase()
+          .replace(/[\s\-_,.]+/g, "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+
+        if (normalizedCourseTitle === normalizedCurrentTitle) {
+          console.log("✅ ნაპოვნია დამთხვევა ნორმალიზებული მეთოდით!");
+          console.log(`  კურსი: "${course.title}" (ID: ${course.id})`);
+
+          setMatchingCourse(course);
+          console.log("Setting course_id to:", course.id);
+          form.setValue("course_id", String(course.id));
+          return; // მოვძებნეთ, გამოვდივართ
+        }
+      }
+
+      // მეთოდი 2: ვეძებთ "შეიცავს" მეთოდით
+      console.log("👀 ვცდილობთ მოძიებას შეიცავს-მეთოდით...");
+
+      const exactMatches = courses.filter(
+        (course) =>
+          course.title
+            .trim()
+            .toLowerCase()
+            .includes(trimmedTitle.toLowerCase()) ||
+          trimmedTitle.toLowerCase().includes(course.title.trim().toLowerCase())
+      );
+
+      if (exactMatches.length === 1) {
+        // მხოლოდ ერთი დამთხვევა
+        const match = exactMatches[0];
+        console.log("✅ ნაპოვნია ერთი დამთხვევა შეიცავს-მეთოდით!");
+        console.log(`  კურსი: "${match.title}" (ID: ${match.id})`);
+
+        setMatchingCourse(match);
+        console.log("Setting course_id to:", match.id);
+        form.setValue("course_id", String(match.id));
+      } else if (exactMatches.length > 1) {
+        // რამდენიმე დამთხვევა
+        console.log(
+          `⚠️ ნაპოვნია ${exactMatches.length} დამთხვევა - ვერ ვადგენთ რომელია სწორი:`
+        );
+        exactMatches.forEach((match, idx) => {
+          console.log(`  ${idx + 1}. "${match.title}" (ID: ${match.id})`);
+        });
+      } else {
+        console.log("❌ ვერც ერთი მეთოდით ვერ მოიძებნა შესაბამისი კურსი");
+        setMatchingCourse(null);
+        // Clear course_id if no match is found
+        form.setValue("course_id", null);
+      }
+    } else {
+      // Clear if title is empty
+      setMatchingCourse(null);
+      form.setValue("course_id", null);
+    }
+  }, [currentTitle, courses, form]);
+
   // Fetch slider data if in edit mode
   useEffect(() => {
-    if (sliderId) {
+    if (sliderId && courses.length > 0) {
       const fetchSliderData = async () => {
         setLoading(true);
         try {
-          // Use the API endpoint instead of direct Supabase call
           const response = await fetch(`/api/sliders/${sliderId}`);
 
           if (!response.ok) {
@@ -110,16 +290,85 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
           }
 
           const data = await response.json();
+          console.log("Fetched slider data:", data);
 
           if (data) {
+            // Check if there's a button_link that contains a course ID
+            let courseId = null;
+
+            if (data.button_link) {
+              // Handle both old and new formats
+              if (data.button_link.startsWith("/offers/")) {
+                // Old format: /offers/{id}
+                const matches = data.button_link.match(/\/offers\/(\d+)/);
+                if (matches && matches[1]) {
+                  courseId = matches[1];
+                  console.log(
+                    "Extracted course ID from old button_link format:",
+                    courseId
+                  );
+                }
+              } else if (data.button_link.startsWith("/offer/")) {
+                // Old format: /offer/{id}
+                const matches = data.button_link.match(/\/offer\/(\d+)/);
+                if (matches && matches[1]) {
+                  courseId = matches[1];
+                  console.log(
+                    "Extracted course ID from old button_link format:",
+                    courseId
+                  );
+                }
+              } else if (data.button_link.startsWith("/courses/")) {
+                // New format: /courses/{id}
+                const matches = data.button_link.match(/\/courses\/(\d+)/);
+                if (matches && matches[1]) {
+                  courseId = matches[1];
+                  console.log(
+                    "Extracted course ID from button_link:",
+                    courseId
+                  );
+                }
+              }
+            }
+
+            // First reset form with fetched data
             form.reset({
               title: data.title || "",
               text: data.text || "",
               image: data.image || "",
-              button_link: data.button_link || "",
+              course_id: courseId,
             });
+
             if (data.image) {
               setImagePreview(data.image);
+            }
+
+            // Then explicitly check for a match with the current title
+            if (data.title) {
+              const matchedCourse = courses.find(
+                (course) =>
+                  course.title.toLowerCase() === data.title.toLowerCase()
+              );
+
+              if (matchedCourse) {
+                console.log(
+                  "Found matching course for existing slider:",
+                  matchedCourse
+                );
+                setMatchingCourse(matchedCourse);
+                // ALWAYS update course_id based on matched course
+                console.log(
+                  "Setting course_id for existing slider to:",
+                  matchedCourse.id
+                );
+                form.setValue("course_id", String(matchedCourse.id));
+              } else {
+                console.log(
+                  "No matching course found for existing slider with title:",
+                  data.title
+                );
+                setMatchingCourse(null);
+              }
             }
           }
         } catch (err) {
@@ -132,7 +381,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
 
       fetchSliderData();
     }
-  }, [sliderId, form]);
+  }, [sliderId, form, courses]);
 
   // Handle manual image URL entry with preview
   const handleImageUrlChange = (url: string) => {
@@ -197,78 +446,164 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
     setSuccess(null);
 
     try {
-      // Create a properly typed object structure for submitting
+      // ✨ სპეციალური შემოწმება - ჯერ დავრწმუნდეთ, რომ კურსი ნაპოვნია
+      let finalCourseId: number | null = null;
+      let foundMatch = false;
+      let matchedCourseName = "";
+
+      console.log("🔍 შემოწმება: მიმდინარეობს matched course-ის ძიება...");
+
+      if (data.title && data.title.trim()) {
+        // ✨ ვიპოვოთ კურსი ზუსტი (case-insensitive) დამთხვევით
+        const matchedCourse = courses.find(
+          (course) =>
+            course.title.toLowerCase() === data.title.trim().toLowerCase()
+        );
+
+        if (matchedCourse) {
+          finalCourseId = matchedCourse.id;
+          foundMatch = true;
+          matchedCourseName = matchedCourse.title;
+
+          // ახალი ფორმატი: /courses/{id}
+          const newLink = `/courses/${matchedCourse.id}`;
+
+          console.log("✅ კურსი ნაპოვნია:", {
+            title: matchedCourse.title,
+            id: matchedCourse.id,
+            link: newLink,
+          });
+
+          // ✨ ვადასტურებთ, რომ course_id დაყენებულია
+          form.setValue("course_id", String(matchedCourse.id));
+        } else {
+          console.log("❌ სათაურით კურსი ვერ მოიძებნა:", data.title.trim());
+          finalCourseId = null;
+          form.setValue("course_id", null);
+        }
+      } else if (data.course_id) {
+        // თუ course_id უკვე დაყენებულია, მაგრამ სათაური არ ემთხვევა
+        finalCourseId = parseInt(data.course_id);
+
+        // ✨ ვადასტურებთ რომ course_id ვალიდურია
+        const validCourse = courses.find(
+          (course) => course.id === finalCourseId
+        );
+        if (validCourse) {
+          foundMatch = true;
+          matchedCourseName = validCourse.title;
+          console.log("✅ კურსი ნაპოვნია ID-ით:", {
+            id: finalCourseId,
+            title: validCourse.title,
+          });
+        } else {
+          console.log(
+            "⚠️ გამოყენებული course_id ვერ მოიძებნა ბაზაში:",
+            finalCourseId
+          );
+        }
+      }
+
+      // საბოლოო შემოწმება - კონფირმაცია მომხმარებლისთვის
+      if (foundMatch) {
+        console.log(
+          `✅ დადასტურებული კავშირი: "${matchedCourseName}" (ID: ${finalCourseId})`
+        );
+      } else {
+        console.log("❌ კურსთან კავშირი ვერ მოიძებნა");
+      }
+
+      // Create the data object to submit
       const sliderData: SliderData = {
         title: data.title.trim() || null,
         text: data.text.trim() || null,
         image: data.image.trim() || null,
-        button_link: data.button_link.trim() || null,
+        course_id: finalCourseId,
       };
 
-      // Debug log the data being submitted
-      console.log("Submitting slider data with keys:", Object.keys(sliderData));
-      console.log("Title:", sliderData.title);
-      console.log("Text:", sliderData.text);
-      console.log("Button link:", sliderData.button_link);
-      console.log("Image provided:", !!sliderData.image);
-
-      if (sliderData.image) {
-        console.log(`Image data length: ${sliderData.image.length} characters`);
-      }
+      // LOG EVERYTHING FOR DEBUGGING
+      console.log("📦 მონაცემები გასაგზავნად:");
+      console.log(JSON.stringify(sliderData, null, 2));
+      console.log("course_id მნიშვნელობა:", sliderData.course_id);
+      console.log("course_id ტიპი:", typeof sliderData.course_id);
 
       // Make sure at least one field has a non-null value
-      if (
-        !sliderData.title &&
-        !sliderData.text &&
-        !sliderData.image &&
-        !sliderData.button_link
-      ) {
+      if (!sliderData.title && !sliderData.text && !sliderData.image) {
         setError("გთხოვთ, შეავსოთ მინიმუმ ერთი ველი");
         setLoading(false);
         return;
       }
 
       let response;
+      const jsonData = JSON.stringify(sliderData);
+      console.log("🚀 საბოლოო მონაცემები სერვერზე გასაგზავნად:", jsonData);
+
+      // ✨ წარმატების შემთხვევაში გამოვაჩინოთ კურსის კავშირის ინფორმაცია
+      const successMessage = foundMatch
+        ? `სლაიდერი ${isEditMode ? "განახლდა" : "შეიქმნა"} და დაკავშირდა კურსთან: "${matchedCourseName}"`
+        : isEditMode
+          ? "სლაიდერი წარმატებით განახლდა"
+          : "სლაიდერი წარმატებით შეიქმნა";
 
       if (isEditMode && sliderId) {
-        // Update existing slider using the API endpoint
-        console.log("Updating existing slider with ID:", sliderId);
+        console.log(`🔄 მიმდინარეობს სლაიდერის განახლება ID-ით: ${sliderId}`);
         response = await fetch(`/api/sliders/${sliderId}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(sliderData),
+          headers: { "Content-Type": "application/json" },
+          body: jsonData,
         });
       } else {
-        // Create new slider using the API endpoint
-        console.log("Creating new slider using API endpoint");
+        console.log("➕ მიმდინარეობს ახალი სლაიდერის შექმნა");
         response = await fetch("/api/sliders", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(sliderData),
+          headers: { "Content-Type": "application/json" },
+          body: jsonData,
         });
+      }
+
+      const responseText = await response.text();
+      console.log("📥 API-ის პასუხი:", responseText);
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+        console.log("📊 API-ის პასუხის მონაცემები:", result);
+
+        // ✨ შევამოწმოთ button_link API-ის პასუხში
+        if (result && result.button_link) {
+          console.log(
+            "✅ API-ის პასუხში button_link დაფიქსირდა:",
+            result.button_link
+          );
+
+          // ვამოწმებთ არის თუ არა სწორი ფორმატი
+          if (result.button_link.startsWith("/courses/")) {
+            console.log("✅ ბმული სწორი ფორმატისაა: ", result.button_link);
+          } else if (
+            result.button_link.startsWith("/offer/") ||
+            result.button_link.startsWith("/offers/")
+          ) {
+            console.log(
+              "⚠️ ბმული ძველი ფორმატისაა, სასურველია განახლდეს: ",
+              result.button_link
+            );
+          }
+        } else {
+          console.log("⚠️ API-ის პასუხში button_link ვერ მოიძებნა!");
+        }
+      } catch (e) {
+        console.error("❌ API-ის პასუხის დამუშავება ვერ მოხერხდა:", e);
+        throw new Error("Unexpected response from server");
       }
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Operation failed");
+        throw new Error(result.error || "Operation failed");
       }
 
-      const result = await response.json();
-
       if (result.partialSuccess) {
-        console.log("Partial success:", result);
         setSuccess("სლაიდერი შეიქმნა, მაგრამ სურათის დამატება ვერ მოხერხდა");
       } else {
-        console.log("Success:", result);
-        setSuccess(
-          isEditMode
-            ? "სლაიდერი წარმატებით განახლდა"
-            : "სლაიდერი წარმატებით შეიქმნა"
-        );
+        setSuccess(successMessage);
       }
 
       setTimeout(() => {
@@ -316,6 +651,16 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                         className="h-12"
                       />
                     </FormControl>
+                    {matchingCourse ? (
+                      <p className="text-xs text-green-600 mt-1">
+                        დაკავშირებულია კურსთან: "{matchingCourse.title}" (ID:{" "}
+                        {matchingCourse.id})
+                      </p>
+                    ) : currentTitle.trim() ? (
+                      <p className="text-xs text-amber-600 mt-1">
+                        არ მოიძებნა კურსი სათაურით: "{currentTitle.trim()}"
+                      </p>
+                    ) : null}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -334,26 +679,6 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                         placeholder="შეიყვანეთ ტექსტი"
                         className="min-h-[150px] resize-none"
                         {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="button_link"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-base">
-                      ღილაკის ბმული (არასავალდებულო)
-                    </FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="შეიყვანეთ ღილაკის ბმული"
-                        {...field}
-                        className="h-12"
                       />
                     </FormControl>
                     <FormMessage />
