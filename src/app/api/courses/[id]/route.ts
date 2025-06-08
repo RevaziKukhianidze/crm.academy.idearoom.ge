@@ -1,12 +1,14 @@
+import { log } from "console";
 import { createClient } from "../../../../../supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: { id: string } }
 ) {
   const supabase = await createClient();
   const id = params.id;
+  console.log(123);
 
   try {
     const body = await request.json();
@@ -31,7 +33,7 @@ export async function PUT(
     ) {
       return NextResponse.json(
         { error: "No fields to update" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -61,14 +63,14 @@ export async function PUT(
   } catch (error) {
     return NextResponse.json(
       { error: "Invalid request body" },
-      { status: 400 },
+      { status: 400 }
     );
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: { id: string } }
 ) {
   const supabase = await createClient();
   const id = params.id;
