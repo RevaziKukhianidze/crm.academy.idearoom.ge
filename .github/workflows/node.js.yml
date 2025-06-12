@@ -32,6 +32,6 @@ jobs:
     - name: Deploy
       run: |
          cd /home/idearoom-crm/actions-runner-crm/_work/crm.academy.idearoom.ge/crm.academy.idearoom.ge
-         pm2 delete 1 || true
+         pm2 delete crm-academy-app || true
          pm2 start npm --name "crm-academy-app" -- start
  
