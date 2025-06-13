@@ -5,7 +5,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // This should be service role key with admin access
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error("Missing Supabase environment variables");
   process.exit(1);
 }
 
@@ -24,7 +23,6 @@ async function addSectionImageColumn() {
     });
 
     if (error) {
-      console.error("Error adding column:", error);
       return;
     }
 
