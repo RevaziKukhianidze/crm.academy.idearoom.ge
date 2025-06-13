@@ -77,6 +77,7 @@ export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
           cacheControl: "3600",
           upsert: false, // Ensure files are not overwritten
         });
+      console.log("h");
 
       if (uploadError) throw uploadError;
 
