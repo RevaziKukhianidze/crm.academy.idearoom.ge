@@ -7,6 +7,7 @@ import CourseTable from "../../../components/course-table";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PlusCircle } from "lucide-react";
+import CacheClearButton from "@/components/cache-clear-button";
 import { createClient } from "../../../../supabase/server";
 
 // Define the Course interface to match what CourseTable expects
@@ -93,12 +94,15 @@ export default function CoursesPage() {
         <div className="container mx-auto px-4 py-8 flex flex-col gap-8">
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold">კურსების მართვა</h1>
-            <Link href="/dashboard/courses/new">
-              <Button className="flex items-center gap-2">
-                <PlusCircle size={16} />
-                ახალი კურსი
-              </Button>
-            </Link>
+            <div className="flex items-center gap-3">
+              <CacheClearButton type="courses" />
+              <Link href="/dashboard/courses/new">
+                <Button className="flex items-center gap-2">
+                  <PlusCircle size={16} />
+                  ახალი კურსი
+                </Button>
+              </Link>
+            </div>
           </div>
           <CourseTable initialCourses={courses} />
         </div>

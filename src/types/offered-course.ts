@@ -18,6 +18,8 @@ export interface OfferedCourse {
   discount_percentage?: string;
   lesson_time?: string;
   start_course?: string;
+  // Image used for "other offers" section
+  section_image?: string;
 }
 
 export interface OfferedCourseFormData

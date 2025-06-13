@@ -10,6 +10,7 @@ import {
   Layers,
   GraduationCap,
   ArrowUpRight,
+  MessageCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const [usersFormCount, setUsersFormCount] = useState(0);
   const [offeredCoursesCount, setOfferedCoursesCount] = useState(0);
   const [coursesCount, setCoursesCount] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
 
   // Authentication check
   useEffect(() => {
@@ -81,6 +83,12 @@ export default function Dashboard() {
           .from("courses")
           .select("*", { count: "exact", head: true });
         setCoursesCount(fetchedCoursesCount || 0);
+
+        // Get reviews count
+        const { count: fetchedReviewCount } = await supabase
+          .from("review")
+          .select("*", { count: "exact", head: true });
+        setReviewCount(fetchedReviewCount || 0);
 
         // Get users_form data and count
         const { data: fetchedUsersFormData, error } = await supabase
@@ -153,7 +161,7 @@ export default function Dashboard() {
           </header>
 
           {/* Stats Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -219,6 +227,22 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  შეფასებები
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="text-3xl font-bold">{reviewCount}</div>
+                  <div className="p-2 bg-pink-100 dark:bg-pink-900/30 rounded-full">
+                    <MessageCircle className="h-5 w-5 text-pink-600 dark:text-pink-400" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* User Form Data Section */}
@@ -261,6 +285,23 @@ export default function Dashboard() {
               <CardFooter>
                 <Button asChild className="w-full">
                   <Link href="/dashboard/courses">კურსების მართვა</Link>
+                </Button>
+              </CardFooter>
+            </Card>
+          </section>
+
+          {/* Reviews Quick Link */}
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="hover:shadow-md transition-shadow">
+              <CardHeader>
+                <CardTitle>შეფასებების მართვა</CardTitle>
+                <CardDescription>
+                  დაამატეთ, შეცვალეთ ან წაშალეთ შეფასებები
+                </CardDescription>
+              </CardHeader>
+              <CardFooter>
+                <Button asChild variant="outline" className="w-full">
+                  <Link href="/dashboard/reviews">შეფასებების მართვა</Link>
                 </Button>
               </CardFooter>
             </Card>

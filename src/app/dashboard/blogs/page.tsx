@@ -7,6 +7,7 @@ import BlogTable from "@/components/blog-table";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PlusCircle } from "lucide-react";
+import CacheClearButton from "@/components/cache-clear-button";
 import { createClient } from "../../../../supabase/server";
 import { supabase } from "../../../../supabase/client";
 import { Blog } from "@/types/blog";
@@ -90,15 +91,18 @@ export default function BlogsPage() {
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">ბლოგების მართვა</h1>
-          <Button asChild>
-            <Link
-              href="/dashboard/blogs/new"
-              className="flex items-center gap-2"
-            >
-              <PlusCircle size={16} />
-              ახალი ბლოგი
-            </Link>
-          </Button>
+          <div className="flex items-center gap-3">
+            <CacheClearButton type="blogs" />
+            <Button asChild>
+              <Link
+                href="/dashboard/blogs/new"
+                className="flex items-center gap-2"
+              >
+                <PlusCircle size={16} />
+                ახალი ბლოგი
+              </Link>
+            </Button>
+          </div>
         </div>
         <BlogTable initialBlogs={blogs} />
       </div>

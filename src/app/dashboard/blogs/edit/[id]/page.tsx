@@ -60,6 +60,13 @@ export default function EditBlogPage({ params }: { params: { id: string } }) {
     }
   };
 
+  const handleBlogUpdate = () => {
+    // Force page refresh after successful update
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -86,7 +93,7 @@ export default function EditBlogPage({ params }: { params: { id: string } }) {
       <main className="w-full">
         <div className="container mx-auto px-4 py-8 flex flex-col gap-8">
           <h1 className="text-3xl font-bold">ბლოგის რედაქტირება</h1>
-          {blog && <BlogForm blog={blog} />}
+          {blog && <BlogForm blog={blog} onUpdate={handleBlogUpdate} />}
         </div>
       </main>
     </>

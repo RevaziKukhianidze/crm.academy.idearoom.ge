@@ -1,5 +1,6 @@
 import { createClient } from "../../../../../supabase/server";
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 
 // GET an individual offered course by ID
 export async function GET(
@@ -160,6 +161,11 @@ export async function PUT(
     }
 
     console.log(`Successfully updated offered course ID ${id}`);
+
+    // Invalidate cache after update
+    revalidatePath("/offers");
+    revalidatePath("/");
+
     // Return the first item from the results (should be only one)
     return NextResponse.json(data[0]);
   } catch (error) {
@@ -206,6 +212,10 @@ export async function DELETE(
       console.error("Error deleting offered course:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Invalidate ISR / tags so "other offers" list refreshes
+    revalidatePath("/offers");
+    revalidatePath("/");
 
     return NextResponse.json({
       message: "Offered course deleted successfully",

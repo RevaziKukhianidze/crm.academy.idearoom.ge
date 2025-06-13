@@ -14,9 +14,10 @@ import { v4 as uuidv4 } from "uuid";
 
 interface BlogFormProps {
   blog?: Blog;
+  onUpdate?: () => void;
 }
 
-export default function BlogForm({ blog }: BlogFormProps) {
+export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
   const initialData: BlogFormData = {
     title: blog?.title || "",
     text: blog?.text || "",
@@ -119,18 +120,39 @@ export default function BlogForm({ blog }: BlogFormProps) {
       const dataToSubmit = { ...formData };
 
       if (blog) {
-        // Update existing blog
-        const { error } = await supabase
-          .from("blogs")
-          .update(dataToSubmit)
-          .eq("id", blog.id);
+        // Update existing blog using API route
+        const response = await fetch(`/api/blogs/${blog.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(dataToSubmit),
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to update blog");
+        }
+
+        // Call onUpdate callback if provided (for edit mode)
+        if (onUpdate) {
+          onUpdate();
+          return; // Don't navigate since onUpdate handles refresh
+        }
       } else {
-        // Create new blog
-        const { error } = await supabase.from("blogs").insert([dataToSubmit]);
+        // Create new blog using API route
+        const response = await fetch("/api/blogs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(dataToSubmit),
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to create blog");
+        }
       }
 
       router.push("/dashboard/blogs");

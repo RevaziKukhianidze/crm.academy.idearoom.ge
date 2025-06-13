@@ -29,15 +29,17 @@ export interface Course {
   oldprice: number;
   syllabus_title: string[];
   syllabus_content: string[][];
+  section_image: string;
 }
 
 export interface CourseFormData extends Omit<Course, "id"> {}
 
 interface CourseFormProps {
   course?: Course;
+  onUpdate?: () => void;
 }
 
-export default function CourseForm({ course }: CourseFormProps) {
+export default function CourseForm({ course, onUpdate }: CourseFormProps) {
   // Initialize form data (same as before)
   const initialCourseDetails = Array.isArray(course?.course_details)
     ? course.course_details
@@ -68,6 +70,7 @@ export default function CourseForm({ course }: CourseFormProps) {
     oldprice: course?.oldprice || 0,
     syllabus_title: initialSyllabusTitle,
     syllabus_content: initialSyllabusContent,
+    section_image: course?.section_image || "",
   };
 
   const [formData, setFormData] = useState<CourseFormData>(initialData);
@@ -75,10 +78,13 @@ export default function CourseForm({ course }: CourseFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isIconUploading, setIsIconUploading] = useState(false);
+  const [isSectionUploading, setIsSectionUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [iconUploadProgress, setIconUploadProgress] = useState(0);
+  const [sectionUploadProgress, setSectionUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iconInputRef = useRef<HTMLInputElement>(null);
+  const sectionInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   // Input handlers remain the same...
@@ -202,25 +208,37 @@ export default function CourseForm({ course }: CourseFormProps) {
   };
 
   // FIXED FILE UPLOAD FUNCTION
-  const handleFileUpload = async (file: File, type: "image" | "icon") => {
+  const handleFileUpload = async (
+    file: File,
+    type: "image" | "icon" | "section"
+  ) => {
     if (!file) return;
 
     const setProgressState =
-      type === "image" ? setUploadProgress : setIconUploadProgress;
+      type === "image"
+        ? setUploadProgress
+        : type === "icon"
+          ? setIconUploadProgress
+          : setSectionUploadProgress;
 
     try {
       if (type === "image") {
         setIsUploading(true);
         setUploadProgress(0);
       } else {
-        setIsIconUploading(true);
-        setIconUploadProgress(0);
+        if (type === "icon") {
+          setIsIconUploading(true);
+          setIconUploadProgress(0);
+        } else {
+          setIsSectionUploading(true);
+          setSectionUploadProgress(0);
+        }
       }
 
       const fileExt = file.name.split(".").pop();
       const fileName = `${uuidv4()}.${fileExt}`;
       const filePath = `${fileName}`;
-      const bucket = "course-images"; // Your bucket name
+      const bucket = "course-images"; // Using same bucket for simplicity
 
       // Create a simulated progress update
       const progressInterval = setInterval(() => {
@@ -257,10 +275,15 @@ export default function CourseForm({ course }: CourseFormProps) {
           image: publicUrl,
           image_file_path: filePath,
         }));
-      } else {
+      } else if (type === "icon") {
         setFormData((prev) => ({
           ...prev,
           courseIcon: publicUrl,
+        }));
+      } else {
+        setFormData((prev) => ({
+          ...prev,
+          section_image: publicUrl,
         }));
       }
 
@@ -269,7 +292,11 @@ export default function CourseForm({ course }: CourseFormProps) {
         if (type === "image") {
           setIsUploading(false);
         } else {
-          setIsIconUploading(false);
+          if (type === "icon") {
+            setIsIconUploading(false);
+          } else {
+            setIsSectionUploading(false);
+          }
         }
       }, 500);
     } catch (err: any) {
@@ -279,25 +306,31 @@ export default function CourseForm({ course }: CourseFormProps) {
       if (type === "image") {
         setIsUploading(false);
       } else {
-        setIsIconUploading(false);
+        if (type === "icon") {
+          setIsIconUploading(false);
+        } else {
+          setIsSectionUploading(false);
+        }
       }
     }
   };
 
   const handleFileInputChange = (
     e: React.ChangeEvent<HTMLInputElement>,
-    type: "image" | "icon"
+    type: "image" | "icon" | "section"
   ) => {
     if (e.target.files && e.target.files.length > 0) {
       handleFileUpload(e.target.files[0], type);
     }
   };
 
-  const triggerFileInput = (type: "image" | "icon") => {
+  const triggerFileInput = (type: "image" | "icon" | "section") => {
     if (type === "image" && fileInputRef.current) {
       fileInputRef.current.click();
     } else if (type === "icon" && iconInputRef.current) {
       iconInputRef.current.click();
+    } else if (type === "section" && sectionInputRef.current) {
+      sectionInputRef.current.click();
     }
   };
 
@@ -333,17 +366,39 @@ export default function CourseForm({ course }: CourseFormProps) {
       };
 
       if (course && course.id) {
-        // Update existing course
-        const { error } = await supabase
-          .from("courses")
-          .update(dataToSubmit)
-          .eq("id", course.id);
+        // Update existing course using API route
+        const response = await fetch(`/api/courses/${course.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(dataToSubmit),
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to update course");
+        }
+
+        // Call onUpdate callback if provided (for edit mode)
+        if (onUpdate) {
+          onUpdate();
+          return; // Don't navigate since onUpdate handles refresh
+        }
       } else {
-        // Create new course
-        const { error } = await supabase.from("courses").insert([dataToSubmit]);
-        if (error) throw error;
+        // Create new course using API route
+        const response = await fetch("/api/courses", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(dataToSubmit),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to create course");
+        }
       }
 
       router.push("/dashboard/courses");
@@ -591,6 +646,62 @@ export default function CourseForm({ course }: CourseFormProps) {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Section Image Upload */}
+          <div className="space-y-2">
+            <Label>სხვა კურსებისთვის პატარა ფოტო</Label>
+            <div className="flex gap-4 items-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => triggerFileInput("section")}
+                className="flex items-center gap-2"
+              >
+                <Upload size={16} /> Upload
+              </Button>
+              <input
+                type="file"
+                accept="image/*"
+                ref={sectionInputRef}
+                onChange={(e) => handleFileInputChange(e, "section")}
+                style={{ display: "none" }}
+              />
+              {isSectionUploading && (
+                <div className="w-full max-w-xs">
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${sectionUploadProgress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Uploading: {sectionUploadProgress}%
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {formData.section_image ? (
+              <div className="w-full max-w-md h-40 rounded-md overflow-hidden bg-muted relative mt-2">
+                <img
+                  src={formData.section_image}
+                  alt="Section preview"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src =
+                      "https://via.placeholder.com/400x300?text=Invalid+Image";
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="w-full max-w-md h-40 rounded-md overflow-hidden bg-muted flex items-center justify-center border border-dashed border-muted-foreground/50 mt-2">
+                <div className="text-muted-foreground flex flex-col items-center p-4">
+                  <FileIcon size={40} strokeWidth={1} />
+                  <span className="text-sm mt-2">ფოტო არ არის არჩეული</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Syllabus Section */}

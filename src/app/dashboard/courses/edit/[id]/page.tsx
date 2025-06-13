@@ -23,19 +23,32 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
           return;
         }
 
-        // Fetch the course
-        const supabase = await createClient();
-        const { data: courseData, error: fetchError } = await supabase
-          .from("courses")
-          .select("*")
-          .eq("id", parseInt(params.id, 10))
-          .maybeSingle();
+        // Fetch the course via API route to ensure consistent access
+        const response = await fetch(`/api/courses?id=${params.id}`);
+        let courseData: any = null;
+        if (response.ok) {
+          const json = await response.json();
+          if (!json.error) {
+            courseData = json;
+          }
+        }
 
-        if (fetchError || !courseData) {
-          console.error(
-            "Error fetching course or course not found:",
-            fetchError
-          );
+        // If API route failed (e.g., returns error or empty), fall back to direct Supabase query
+        if (!courseData) {
+          const supabase = await createClient();
+          const { data, error: fetchError } = await supabase
+            .from("courses")
+            .select("*")
+            .eq("id", parseInt(params.id, 10))
+            .maybeSingle();
+          if (fetchError) {
+            console.error("Supabase fallback error:", fetchError);
+          }
+          courseData = data;
+        }
+
+        if (!courseData) {
+          console.error("Course not found through API or direct query");
           setError("კურსი ვერ მოიძებნა");
           setTimeout(() => {
             router.replace("/dashboard/courses");
@@ -61,6 +74,13 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
     } catch (err) {
       console.error("localStorage is not available:", err);
     }
+  };
+
+  const handleCourseUpdate = () => {
+    // Force page refresh after successful update
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
   };
 
   if (loading) {
@@ -89,7 +109,9 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
       <main className="w-full">
         <div className="container mx-auto px-4 py-8 flex flex-col gap-8">
           <h1 className="text-3xl font-bold">კურსის რედაქტირება</h1>
-          {course && <CourseForm course={course} />}
+          {course && (
+            <CourseForm course={course} onUpdate={handleCourseUpdate} />
+          )}
         </div>
       </main>
     </>

@@ -35,11 +35,11 @@ export default function LecturerForm() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [formData, setFormData] = useState({
     fullName: "",
     field: "",
-    lecturer_text: "",
     lecturer_image: "",
   });
 
@@ -78,7 +78,6 @@ export default function LecturerForm() {
             setFormData({
               fullName: data.fullName || "",
               field: data.field || "",
-              lecturer_text: data.lecturer_text || "",
               lecturer_image: data.lecturer_image || "",
             });
 
@@ -98,6 +97,8 @@ export default function LecturerForm() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    console.log(`Input changed: ${name} = ${value}`);
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -105,8 +106,12 @@ export default function LecturerForm() {
 
     // Update preview if the image URL is entered manually
     if (name === "lecturer_image" && value) {
+      console.log("Setting preview URL from manual input:", value);
       setPreviewUrl(value);
+      setError(null);
+      setSuccess(null);
     } else if (name === "lecturer_image" && !value) {
+      console.log("Clearing preview URL");
       setPreviewUrl(null);
     }
   };
@@ -115,12 +120,33 @@ export default function LecturerForm() {
     const file = e.target.files[0];
     if (!file) return;
 
+    // Validate file type
+    const allowedTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      setError("გთხოვთ, აირჩიოთ სწორი ფორმატის სურათი (JPG, PNG, GIF, WebP)");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    if (file.size > maxSize) {
+      setError("სურათის ზომა არ უნდა აღემატებოდეს 5MB-ს");
+      return;
+    }
+
     // Create local preview
     const objectUrl = URL.createObjectURL(file);
     setPreviewUrl(objectUrl);
 
     setUploading(true);
     setError(null);
+    setSuccess(null);
 
     try {
       const supabase = createClientSupabase();
@@ -130,7 +156,49 @@ export default function LecturerForm() {
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `lecturer_images/${fileName}`;
 
+      console.log("ფაილის ატვირთვა იწყება:", filePath);
+
+      // First, try to check if bucket exists and create if needed
+      console.log("Checking Supabase storage bucket...");
+
+      try {
+        const { data: buckets, error: bucketError } =
+          await supabase.storage.listBuckets();
+        console.log("Available buckets:", buckets);
+
+        const lecturerBucket = buckets?.find(
+          (bucket) => bucket.name === "lecturers"
+        );
+        if (!lecturerBucket) {
+          console.log("lecturers bucket not found, trying to create...");
+          // Note: This might fail due to permissions, but we'll try
+          const { data: newBucket, error: createError } =
+            await supabase.storage.createBucket("lecturers", {
+              public: true,
+              allowedMimeTypes: [
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp",
+              ],
+              fileSizeLimit: 5242880, // 5MB
+            });
+
+          if (createError) {
+            console.error("Could not create bucket:", createError);
+            throw new Error(
+              `Storage bucket შეცდომა: ${createError.message}. გთხოვთ, შეამოწმოთ Supabase პროექტის კონფიგურაცია.`
+            );
+          }
+          console.log("Bucket created successfully:", newBucket);
+        }
+      } catch (bucketErr) {
+        console.error("Bucket check/creation error:", bucketErr);
+        // Continue with upload anyway, maybe bucket exists but we can't list it
+      }
+
       // Upload file to Supabase Storage - using the "lecturers" bucket
+      console.log("Starting file upload to bucket...");
       const { data, error } = await supabase.storage
         .from("lecturers")
         .upload(filePath, file, {
@@ -139,24 +207,101 @@ export default function LecturerForm() {
         });
 
       if (error) {
-        throw error;
+        console.error("Supabase upload error:", error);
+        console.error("Error details:", JSON.stringify(error, null, 2));
+
+        // Try alternative approach - upload to a different bucket or use base64
+        if (
+          error.message.includes("bucket") ||
+          error.message.includes("not found")
+        ) {
+          throw new Error(
+            `Storage bucket არ არსებობს. გთხოვთ, შექმენით 'lecturers' bucket Supabase Storage-ში.`
+          );
+        }
+
+        throw new Error(`ატვირთვის შეცდომა: ${error.message}`);
       }
+
+      console.log("ფაილი წარმატებით აიტვირთა:", data);
 
       // Get the public URL - use the same "lecturers" bucket name
       const {
         data: { publicUrl },
       } = supabase.storage.from("lecturers").getPublicUrl(filePath);
 
+      console.log("მიღებული public URL:", publicUrl);
+
+      if (!publicUrl) {
+        throw new Error("სურათის URL-ის მიღება ვერ მოხერხდა");
+      }
+
       // Update form data with the new image URL
       setFormData((prev) => ({
         ...prev,
         lecturer_image: publicUrl,
       }));
+
+      // Clean up the object URL
+      URL.revokeObjectURL(objectUrl);
+      setPreviewUrl(publicUrl);
+
+      console.log("სურათი წარმატებით აიტვირთა და URL განახლდა");
+      setSuccess("სურათი წარმატებით აიტვირთა!");
     } catch (err) {
       console.error("სურათის ატვირთვის შეცდომა:", err);
-      setError(`სურათის ატვირთვა ვერ მოხერხდა: ${err.message}`);
 
-      // Keep the local preview for better UX even if upload failed
+      // Try fallback: convert to base64 and store directly
+      console.log("Trying fallback: converting to base64...");
+      try {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const base64Data = e.target.result;
+          console.log(
+            "Base64 conversion successful, length:",
+            base64Data.length
+          );
+
+          setFormData((prev) => ({
+            ...prev,
+            lecturer_image: base64Data,
+          }));
+
+          // Clean up the object URL and use base64 for preview
+          URL.revokeObjectURL(objectUrl);
+          setPreviewUrl(base64Data);
+
+          setSuccess("სურათი წარმატებით აიტვირთა! (fallback მეთოდი)");
+          setError(null);
+        };
+
+        reader.onerror = () => {
+          console.error("Base64 conversion failed");
+          handleUploadFailure();
+        };
+
+        reader.readAsDataURL(file);
+      } catch (base64Err) {
+        console.error("Base64 fallback failed:", base64Err);
+        handleUploadFailure();
+      }
+
+      function handleUploadFailure() {
+        setError(`სურათის ატვირთვა ვერ მოხერხდა: ${err.message}`);
+
+        // Clear the preview if upload failed
+        URL.revokeObjectURL(objectUrl);
+        setPreviewUrl(null);
+        setFormData((prev) => ({
+          ...prev,
+          lecturer_image: "",
+        }));
+
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
     } finally {
       setUploading(false);
     }
@@ -164,6 +309,8 @@ export default function LecturerForm() {
 
   const handleRemoveImage = () => {
     setPreviewUrl(null);
+    setError(null);
+    setSuccess(null);
     setFormData((prev) => ({
       ...prev,
       lecturer_image: "",
@@ -183,44 +330,68 @@ export default function LecturerForm() {
     e.preventDefault();
     setSaving(true);
     setError(null);
+    setSuccess(null);
+
+    // Validate required fields
+    if (!formData.fullName.trim()) {
+      setError("სრული სახელი აუცილებელია");
+      setSaving(false);
+      return;
+    }
 
     try {
       const supabase = createClientSupabase();
       let response;
 
+      console.log("ლექტორის შენახვა იწყება:", {
+        ...formData,
+        lecturer_image: formData.lecturer_image
+          ? `${formData.lecturer_image.substring(0, 50)}... (length: ${formData.lecturer_image.length})`
+          : "არ არის",
+      });
+
+      const lecturerData = {
+        fullName: formData.fullName,
+        field: formData.field,
+        lecturer_image: formData.lecturer_image,
+      };
+
       if (isEditMode) {
         // Update existing lecturer
+        console.log("Updating lecturer with ID:", lecturerId);
         response = await supabase
           .from("lecturers")
           .update({
-            fullName: formData.fullName,
-            field: formData.field,
-            lecturer_text: formData.lecturer_text,
-            lecturer_image: formData.lecturer_image,
+            ...lecturerData,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", lecturerId);
+          .eq("id", lecturerId)
+          .select(); // Add select to get the updated data back
       } else {
         // Insert new lecturer
-        response = await supabase.from("lecturers").insert({
-          fullName: formData.fullName,
-          field: formData.field,
-          lecturer_text: formData.lecturer_text,
-          lecturer_image: formData.lecturer_image,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+        console.log("Inserting new lecturer");
+        response = await supabase
+          .from("lecturers")
+          .insert({
+            ...lecturerData,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .select(); // Add select to get the inserted data back
       }
 
       if (response.error) {
+        console.error("Supabase შენახვის შეცდომა:", response.error);
         throw new Error(response.error.message);
       }
+
+      console.log("ლექტორი წარმატებით შენახულია:", response);
 
       // Success, redirect to lecturers page
       router.push("/dashboard/lecturer");
     } catch (err) {
       console.error("ლექტორის შენახვის შეცდომა:", err);
-      setError(err.message);
+      setError(`ლექტორის შენახვა ვერ მოხერხდა: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -256,6 +427,24 @@ export default function LecturerForm() {
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             <p>{error}</p>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-500 hover:text-red-700 text-sm mt-2 underline"
+            >
+              დახურვა
+            </button>
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+            <p>{success}</p>
+            <button
+              onClick={() => setSuccess(null)}
+              className="text-green-500 hover:text-green-700 text-sm mt-2 underline"
+            >
+              დახურვა
+            </button>
           </div>
         )}
 
@@ -286,18 +475,6 @@ export default function LecturerForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="lecturer_text">ლექტორის შესახებ</Label>
-            <Textarea
-              id="lecturer_text"
-              name="lecturer_text"
-              value={formData.lecturer_text}
-              onChange={handleInputChange}
-              placeholder="შეიყვანეთ ინფორმაცია ლექტორის შესახებ"
-              rows={4}
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label>ლექტორის სურათი</Label>
             <div className="flex gap-2">
               <Input
@@ -306,6 +483,11 @@ export default function LecturerForm() {
                 onChange={handleInputChange}
                 placeholder="შეიყვანეთ სურათის URL ან აირჩიეთ ფაილი"
               />
+              <div className="text-xs text-gray-500 flex items-center px-2">
+                {formData.lecturer_image
+                  ? `✓ ${formData.lecturer_image.length > 50 ? "ფაილი" : "URL"}`
+                  : "არ არის"}
+              </div>
               <input
                 type="file"
                 accept="image/*"
@@ -327,14 +509,21 @@ export default function LecturerForm() {
 
             {previewUrl && (
               <div className="relative mt-4">
-                <div className="w-full max-w-xs h-40 rounded-md overflow-hidden bg-gray-100">
+                <div className="w-full max-w-xs h-40 rounded-md overflow-hidden bg-gray-100 border-2 border-green-200">
                   <img
                     src={previewUrl}
                     alt="ლექტორის სურათის გადახედვა"
                     className="w-full h-full object-cover"
+                    onLoad={() => {
+                      console.log(
+                        "Image loaded successfully:",
+                        previewUrl.substring(0, 50) + "..."
+                      );
+                    }}
                     onError={(e) => {
+                      console.error("Image load error for URL:", previewUrl);
                       e.target.src =
-                        "https://via.placeholder.com/150?text=Image+Error";
+                        "https://via.placeholder.com/150x150/cccccc/666666?text=Image+Error";
                     }}
                   />
                 </div>
@@ -347,6 +536,9 @@ export default function LecturerForm() {
                 >
                   <X className="h-4 w-4" />
                 </Button>
+                <div className="mt-2 text-sm text-green-600">
+                  ✓ სურათი მზადაა შესანახად
+                </div>
               </div>
             )}
 

@@ -8,6 +8,7 @@ export interface Course {
   quantity_lessons?: number;
   quantity_of_students?: string;
   lesson_time?: number;
+  section_image?: string;
 }
 
 export interface CourseFormData {
@@ -19,4 +20,5 @@ export interface CourseFormData {
   quantity_lessons?: number;
   quantity_of_students?: string;
   lesson_time?: number;
+  section_image?: string;
 }

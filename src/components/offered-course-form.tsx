@@ -11,12 +11,17 @@ import { OfferedCourse, OfferedCourseFormData } from "@/types/offered-course";
 import { supabase } from "../../supabase/client";
 import { Upload, Image as ImageIcon, Plus, X, FileIcon } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import Link from "next/link";
 
 interface OfferedCourseFormProps {
   course?: OfferedCourse;
+  onUpdate?: () => void;
 }
 
-export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
+export default function OfferedCourseForm({
+  course,
+  onUpdate,
+}: OfferedCourseFormProps) {
   // Initialize form data
   const initialCourseDetails = Array.isArray(course?.course_details)
     ? course.course_details
@@ -56,6 +61,7 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
     discount_percentage: course?.discount_percentage || "",
     lesson_time: course?.lesson_time || "",
     start_course: course?.start_course || "",
+    section_image: course?.section_image || "",
   };
 
   const [formData, setFormData] =
@@ -64,10 +70,13 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isIconUploading, setIsIconUploading] = useState(false);
+  const [isSectionUploading, setIsSectionUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [iconUploadProgress, setIconUploadProgress] = useState(0);
+  const [sectionUploadProgress, setSectionUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iconInputRef = useRef<HTMLInputElement>(null);
+  const sectionInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   // Basic input handlers
@@ -273,23 +282,30 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
   }, [formData.old_price, formData.price]);
 
   // File upload handlers
-  const handleFileUpload = async (file: File, type: "image" | "icon") => {
+  const handleFileUpload = async (
+    file: File,
+    type: "image" | "icon" | "section"
+  ) => {
     if (!file) return;
 
     try {
       if (type === "image") {
         setIsUploading(true);
         setUploadProgress(10); // Show some initial progress
-      } else {
+      } else if (type === "icon") {
         setIsIconUploading(true);
         setIconUploadProgress(10);
+      } else {
+        setIsSectionUploading(true);
+        setSectionUploadProgress(10);
       }
 
       // Try to do a direct file upload first
       try {
         const fileExt = file.name.split(".").pop();
         const fileName = `${uuidv4()}.${fileExt}`;
-        const filePath = `offers/${fileName}`;
+        const folder = type === "section" ? "offers-section" : "offers";
+        const filePath = `${folder}/${fileName}`;
 
         console.log(`Starting upload to public bucket, file: ${filePath}`);
 
@@ -333,9 +349,15 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
         if (type === "image") {
           setFormData((prev) => ({ ...prev, image: urlData.publicUrl }));
           setUploadProgress(100);
-        } else {
+        } else if (type === "icon") {
           setFormData((prev) => ({ ...prev, courseIcon: urlData.publicUrl }));
           setIconUploadProgress(100);
+        } else {
+          setFormData((prev) => ({
+            ...prev,
+            section_image: urlData.publicUrl,
+          }));
+          setSectionUploadProgress(100);
         }
 
         return; // Exit if successful
@@ -352,8 +374,10 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
       // Update progress
       if (type === "image") {
         setUploadProgress(40);
-      } else {
+      } else if (type === "icon") {
         setIconUploadProgress(40);
+      } else {
+        setSectionUploadProgress(40);
       }
 
       // Read the file as base64
@@ -377,8 +401,10 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
       // Update progress
       if (type === "image") {
         setUploadProgress(90);
-      } else {
+      } else if (type === "icon") {
         setIconUploadProgress(90);
+      } else {
+        setSectionUploadProgress(90);
       }
 
       console.log(`Base64 encoding successful, length: ${base64data.length}`);
@@ -387,9 +413,12 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
       if (type === "image") {
         setFormData((prev) => ({ ...prev, image: base64data }));
         setUploadProgress(100);
-      } else {
+      } else if (type === "icon") {
         setFormData((prev) => ({ ...prev, courseIcon: base64data }));
         setIconUploadProgress(100);
+      } else {
+        setFormData((prev) => ({ ...prev, section_image: base64data }));
+        setSectionUploadProgress(100);
       }
     } catch (error) {
       console.error(`Error uploading ${type}:`, error);
@@ -401,9 +430,12 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
         if (type === "image") {
           setIsUploading(false);
           setUploadProgress(0);
-        } else {
+        } else if (type === "icon") {
           setIsIconUploading(false);
           setIconUploadProgress(0);
+        } else {
+          setIsSectionUploading(false);
+          setSectionUploadProgress(0);
         }
       }, 1000); // Keep progress bar for a moment for feedback
     }
@@ -411,18 +443,20 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
 
   const handleFileInputChange = (
     e: React.ChangeEvent<HTMLInputElement>,
-    type: "image" | "icon"
+    type: "image" | "icon" | "section"
   ) => {
     if (e.target.files && e.target.files[0]) {
       handleFileUpload(e.target.files[0], type);
     }
   };
 
-  const triggerFileInput = (type: "image" | "icon") => {
+  const triggerFileInput = (type: "image" | "icon" | "section") => {
     if (type === "image" && fileInputRef.current) {
       fileInputRef.current.click();
     } else if (type === "icon" && iconInputRef.current) {
       iconInputRef.current.click();
+    } else if (type === "section" && sectionInputRef.current) {
+      sectionInputRef.current.click();
     }
   };
 
@@ -512,8 +546,14 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
         throw new Error(errorData.error || "შეთავაზების შენახვა ვერ მოხერხდა");
       }
 
-      // Redirect to courses page on success
-      router.push("/dashboard/offers");
+      // Handle successful submission
+      if (onUpdate) {
+        // Call onUpdate callback if provided (for edit mode with refresh)
+        onUpdate();
+      } else {
+        // Redirect to offers page if no callback provided
+        router.push("/dashboard/offers");
+      }
     } catch (err) {
       console.error("Form submission error:", err);
       setError(
@@ -783,6 +823,61 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
                     onChange={(e) => handleFileInputChange(e, "icon")}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>სხვა შეთავაზებისთვის პატარა ფოტო</Label>
+                <div className="flex gap-4 items-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => triggerFileInput("section")}
+                    className="flex items-center gap-2"
+                  >
+                    <Upload size={16} /> Upload
+                  </Button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={sectionInputRef}
+                    onChange={(e) => handleFileInputChange(e, "section")}
+                    style={{ display: "none" }}
+                  />
+                  {isSectionUploading && (
+                    <div className="w-full max-w-xs">
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all"
+                          style={{ width: `${sectionUploadProgress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Uploading: {sectionUploadProgress}%
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {formData.section_image ? (
+                  <div className="w-full max-w-md h-40 rounded-md overflow-hidden bg-muted relative mt-2">
+                    <img
+                      src={formData.section_image}
+                      alt="Section preview"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src =
+                          "https://via.placeholder.com/400x300?text=Invalid+Image";
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full max-w-md h-40 rounded-md overflow-hidden bg-muted flex items-center justify-center border border-dashed border-muted-foreground/50 mt-2">
+                    <div className="text-muted-foreground flex flex-col items-center p-4">
+                      <FileIcon size={40} strokeWidth={1} />
+                      <span className="text-sm mt-2">ფოტო არ არის არჩეული</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1069,3 +1164,5 @@ export default function OfferedCourseForm({ course }: OfferedCourseFormProps) {
     </form>
   );
 }
+
+export const revalidate = 60; // 1 წუთში განახლდება

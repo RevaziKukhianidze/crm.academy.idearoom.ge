@@ -35,7 +35,7 @@ export default function DashboardNavbar({
   };
 
   return (
-    <nav className="w-full border-b border-border bg-background py-4 sticky top-0 z-50 backdrop-blur-sm bg-background/80">
+    <nav className="w-full border-b border-border py-4 sticky top-0 z-50 backdrop-blur-sm bg-background/80">
       <div className="container mx-auto px-4 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <Link
@@ -95,6 +95,16 @@ export default function DashboardNavbar({
               } flex items-center gap-1 transition-colors`}
             >
               შეთავაზებები
+            </Link>
+            <Link
+              href="/dashboard/reviews"
+              className={`text-sm font-medium ${
+                isActive("/dashboard/reviews")
+                  ? "text-primary"
+                  : "text-foreground/70 hover:text-primary"
+              } flex items-center gap-1 transition-colors`}
+            >
+              შეფასებები
             </Link>
             <Link
               href="/dashboard/sliders"

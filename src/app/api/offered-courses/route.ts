@@ -1,15 +1,28 @@
 import { createClient } from "../../../../supabase/server";
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
+
+  const url = new URL(request.url);
+  const limitParam = url.searchParams.get("limit");
 
   try {
     // Get all offered courses, ordered by creation date (newest first)
-    const { data, error } = await supabase
+    let query = supabase
       .from("offered_course")
       .select("*")
       .order("created_at", { ascending: false });
+
+    if (limitParam) {
+      const limit = parseInt(limitParam, 10);
+      if (!isNaN(limit) && limit > 0) {
+        query = query.limit(limit);
+      }
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching offered courses:", error);
@@ -119,6 +132,11 @@ export async function POST(request: Request) {
     }
 
     console.log("Successfully created offered course:", data[0].id);
+
+    // Invalidate cache after creation
+    revalidatePath("/offers");
+    revalidatePath("/");
+
     // Return the first item from the array (should be the only one)
     return NextResponse.json(data[0], { status: 201 });
   } catch (error) {
