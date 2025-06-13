@@ -49,10 +49,8 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
 
         if (!courseData) {
           console.error("Course not found through API or direct query");
-          setError("კურსი ვერ მოიძებნა");
-          setTimeout(() => {
-            router.replace("/dashboard/courses");
-          }, 2000);
+          router.replace("/dashboard/courses");
+          setLoading(true);
           return;
         }
 

@@ -103,7 +103,8 @@ export async function PUT(
     revalidatePath("/");
     revalidatePath("/dashboard/courses");
 
-    // Clear main site cache for all course-related pages
+    // Clear main site cache
+    await clearCoursesCache();
     await clearCoursesCache(id.toString());
 
     return NextResponse.json(updatedCourse);
@@ -136,6 +137,11 @@ export async function DELETE(
   // Ensure ISR / tagged fetches are invalidated
   revalidatePath("/courses");
   revalidatePath("/");
+  revalidatePath("/dashboard/courses");
+
+  // Clear main site cache
+  await clearCoursesCache();
+  await clearCoursesCache(id.toString());
 
   return NextResponse.json({ success: true });
 }
