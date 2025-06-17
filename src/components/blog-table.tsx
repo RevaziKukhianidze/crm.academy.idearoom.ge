@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Blog } from "@/types/blog";
+import { Blog, BlogTag } from "@/types/blog";
 import {
   Table,
   TableBody,
@@ -22,6 +22,7 @@ import {
   Plus,
   Eye,
   AlertCircle,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -57,22 +58,33 @@ export default function BlogTable({ initialBlogs }: BlogTableProps) {
           table: "blogs",
         },
         (payload) => {
-          switch (payload.eventType) {
-            case "INSERT":
-              setBlogs((prev) => [payload.new as Blog, ...prev]);
-              break;
-            case "UPDATE":
-              setBlogs((prev) =>
-                prev.map((blog) =>
-                  blog.id === payload.new.id ? (payload.new as Blog) : blog
-                )
-              );
-              break;
-            case "DELETE":
-              setBlogs((prev) =>
-                prev.filter((blog) => blog.id !== payload.old.id)
-              );
-              break;
+          console.log("Realtime event:", payload.eventType, payload);
+
+          try {
+            switch (payload.eventType) {
+              case "INSERT":
+                const newBlog = payload.new as Blog;
+                console.log("Adding new blog:", newBlog);
+                setBlogs((prev) => [newBlog, ...prev]);
+                break;
+              case "UPDATE":
+                const updatedBlog = payload.new as Blog;
+                console.log("Updating blog:", updatedBlog);
+                setBlogs((prev) =>
+                  prev.map((blog) =>
+                    blog.id === payload.new.id ? updatedBlog : blog
+                  )
+                );
+                break;
+              case "DELETE":
+                console.log("Deleting blog:", payload.old.id);
+                setBlogs((prev) =>
+                  prev.filter((blog) => blog.id !== payload.old.id)
+                );
+                break;
+            }
+          } catch (error) {
+            console.error("Realtime subscription error:", error);
           }
         }
       )
@@ -83,15 +95,32 @@ export default function BlogTable({ initialBlogs }: BlogTableProps) {
     };
   }, []);
 
+  // Helper function to ensure tags are in correct format
+  const ensureTagFormat = (tag: any): BlogTag => {
+    if (typeof tag === "string") {
+      if (tag.includes(":::")) {
+        const [name, url] = tag.split(":::");
+        return { name, url: url || undefined };
+      }
+      return { name: tag, url: undefined };
+    }
+    return tag;
+  };
+
+  const getLinkTagsSearchText = (linkTags?: (BlogTag | string)[]): string => {
+    if (!linkTags || linkTags.length === 0) return "";
+    return linkTags
+      .map((tag) => ensureTagFormat(tag).name)
+      .join(" ")
+      .toLowerCase();
+  };
+
   // Filter blogs based on search term
   const filteredBlogs = blogs.filter(
     (blog) =>
       blog.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       blog.text?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (blog.tags &&
-        blog.tags.some((tag) =>
-          tag.toLowerCase().includes(searchTerm.toLowerCase())
-        ))
+      getLinkTagsSearchText(blog.linkTag).includes(searchTerm.toLowerCase())
   );
 
   // Sort blogs
@@ -175,7 +204,7 @@ export default function BlogTable({ initialBlogs }: BlogTableProps) {
         <div className="relative w-full sm:w-auto sm:flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="მოძებნეთ ბლოგები სათაურით, შინაარსით ან ტეგებით..."
+            placeholder="მოძებნეთ ბლოგები სათაურით, შინაარსით ან ლინკ ტეგებით..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 w-full"
@@ -225,7 +254,7 @@ export default function BlogTable({ initialBlogs }: BlogTableProps) {
                 </TableHead>
                 <TableHead>შინაარსი</TableHead>
                 <TableHead>სურათი</TableHead>
-                <TableHead>ტეგები</TableHead>
+                <TableHead>ლინკ ტეგები</TableHead>
                 <TableHead className="text-right">მოქმედებები</TableHead>
               </TableRow>
             </TableHeader>
@@ -294,18 +323,47 @@ export default function BlogTable({ initialBlogs }: BlogTableProps) {
                         </span>
                       )}
                     </TableCell>
+
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {blog.tags && blog.tags.length > 0 ? (
-                          blog.tags.map((tag, index) => (
-                            <Badge
-                              key={`${blog.id}-${index}`}
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {tag}
-                            </Badge>
-                          ))
+                        {blog.linkTag && blog.linkTag.length > 0 ? (
+                          blog.linkTag.map((linkTag, index) => {
+                            const linkTagData = ensureTagFormat(linkTag);
+                            return (
+                              <div
+                                key={`${blog.id}-linkTag-${index}`}
+                                className="flex items-center gap-1"
+                              >
+                                {linkTagData.url ? (
+                                  <a
+                                    href={linkTagData.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="hover:opacity-80 transition-opacity"
+                                    title={`ლინკი: ${linkTagData.url}`}
+                                  >
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-xs cursor-pointer border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center gap-1"
+                                    >
+                                      {linkTagData.name}
+                                      <ExternalLink
+                                        size={10}
+                                        className="text-blue-500"
+                                      />
+                                    </Badge>
+                                  </a>
+                                ) : (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs bg-green-100 text-green-700"
+                                  >
+                                    {linkTagData.name}
+                                  </Badge>
+                                )}
+                              </div>
+                            );
+                          })
                         ) : (
                           <span className="text-muted-foreground text-sm">
                             არ არის

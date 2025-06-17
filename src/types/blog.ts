@@ -1,3 +1,9 @@
+export interface BlogTag {
+  name: string;
+  url?: string;
+  follow?: "follow" | "nofollow";
+}
+
 export interface Blog {
   id: number;
   created_at: string;
@@ -6,7 +12,7 @@ export interface Blog {
   image?: string;
   image_file_path?: string;
   image_file_name?: string;
-  tags?: string[];
+  linkTag?: (BlogTag | string)[];
 }
 
 export interface BlogFormData {
@@ -15,5 +21,5 @@ export interface BlogFormData {
   image?: string;
   image_file_path?: string;
   image_file_name?: string;
-  tags?: string[];
+  linkTag?: BlogTag[];
 }

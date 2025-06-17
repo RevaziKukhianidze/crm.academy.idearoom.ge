@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/components/dashboard-navbar";
 import BlogForm from "@/components/blog-form";
 import { Blog } from "@/types/blog";
-import { createClient } from "../../../../../../supabase/server";
 
 export default function EditBlogPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -23,22 +22,20 @@ export default function EditBlogPage({ params }: { params: { id: string } }) {
           return;
         }
 
-        // Fetch the blog
-        const supabase = await createClient();
-        const { data: blogData, error: fetchError } = await supabase
-          .from("blogs")
-          .select("*")
-          .eq("id", parseInt(params.id, 10))
-          .maybeSingle();
+        // Fetch the blog via API route to get parsed tags
+        const response = await fetch(`/api/blogs/${params.id}`);
 
-        if (fetchError || !blogData) {
-          console.error("Error fetching blog or blog not found:", fetchError);
+        if (!response.ok) {
+          console.error("Error fetching blog:", response.statusText);
           setError("ბლოგი ვერ მოიძებნა");
           setTimeout(() => {
             router.replace("/dashboard/blogs");
           }, 2000);
           return;
         }
+
+        const blogData = await response.json();
+        console.log("Fetched blog with parsed tags:", blogData); // Debug log
 
         setBlog(blogData);
         setLoading(false);
@@ -60,11 +57,21 @@ export default function EditBlogPage({ params }: { params: { id: string } }) {
     }
   };
 
-  const handleBlogUpdate = () => {
-    // Force page refresh after successful update
-    setTimeout(() => {
-      window.location.reload();
-    }, 1000);
+  const handleBlogUpdate = async () => {
+    // Re-fetch blog data instead of page refresh
+    try {
+      console.log("Refetching blog data for ID:", params.id);
+      const response = await fetch(`/api/blogs/${params.id}`);
+      if (response.ok) {
+        const updatedBlog = await response.json();
+        console.log("Successfully updated blog data:", updatedBlog);
+        setBlog(updatedBlog);
+      } else {
+        console.error("Failed to fetch updated blog:", response.statusText);
+      }
+    } catch (error) {
+      console.error("Error refetching blog:", error);
+    }
   };
 
   if (loading) {

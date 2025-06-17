@@ -9,19 +9,7 @@ import Link from "next/link";
 import { PlusCircle } from "lucide-react";
 import CacheClearButton from "@/components/cache-clear-button";
 import { createClient } from "../../../../supabase/server";
-
-// Define the Course interface to match what CourseTable expects
-export interface Course {
-  id: number;
-  created_at: string;
-  title?: string;
-  course_details?: string;
-  image?: string;
-  start_course?: string;
-  quantity_lessons?: number;
-  quantity_of_students?: number;
-  lesson_time?: number;
-}
+import { Course } from "@/types/course";
 
 export default function CoursesPage() {
   const router = useRouter();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,29 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "../../supabase/client";
 import { Upload, Image as ImageIcon, Plus, X, FileIcon } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
-
-// Type definitions remain the same...
-export interface Course {
-  id?: string;
-  title: string;
-  course_details: string[];
-  image: string;
-  image_file_path: string;
-  courseIcon: string;
-  start_course: string;
-  quantity_lessons: number;
-  quantity_of_students: string;
-  lesson_time: number;
-  lecturer: string;
-  lecturer_details: string;
-  price: number;
-  oldprice: number;
-  syllabus_title: string[];
-  syllabus_content: string[][];
-  section_image: string;
-}
-
-export interface CourseFormData extends Omit<Course, "id"> {}
+import { Course, CourseFormData } from "@/types/course";
 
 interface CourseFormProps {
   course?: Course;
@@ -86,6 +64,45 @@ export default function CourseForm({ course, onUpdate }: CourseFormProps) {
   const iconInputRef = useRef<HTMLInputElement>(null);
   const sectionInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  // Update form data when course prop changes
+  useEffect(() => {
+    if (course) {
+      const updatedCourseDetails = Array.isArray(course?.course_details)
+        ? course.course_details
+        : course?.course_details
+          ? [course.course_details]
+          : [""];
+
+      const updatedSyllabusTitle = Array.isArray(course?.syllabus_title)
+        ? course.syllabus_title
+        : [""];
+      const updatedSyllabusContent = Array.isArray(course?.syllabus_content)
+        ? course.syllabus_content
+        : [[""]];
+
+      const updatedData: CourseFormData = {
+        title: course?.title || "",
+        course_details: updatedCourseDetails,
+        image: course?.image || "",
+        image_file_path: course?.image_file_path || "",
+        courseIcon: course?.courseIcon || "",
+        start_course: course?.start_course || "",
+        quantity_lessons: course?.quantity_lessons || 0,
+        quantity_of_students: course?.quantity_of_students || "",
+        lesson_time: course?.lesson_time || 0,
+        lecturer: course?.lecturer || "",
+        lecturer_details: course?.lecturer_details || "",
+        price: course?.price || 0,
+        oldprice: course?.oldprice || 0,
+        syllabus_title: updatedSyllabusTitle,
+        syllabus_content: updatedSyllabusContent,
+        section_image: course?.section_image || "",
+      };
+
+      setFormData(updatedData);
+    }
+  }, [course]);
 
   // Input handlers remain the same...
   const handleChange = (
@@ -367,6 +384,9 @@ export default function CourseForm({ course, onUpdate }: CourseFormProps) {
 
       if (course && course.id) {
         // Update existing course using API route
+        console.log(`CourseForm: Updating course with ID: ${course.id}`);
+        console.log(`CourseForm: Request data:`, dataToSubmit);
+
         const response = await fetch(`/api/courses/${course.id}`, {
           method: "PUT",
           headers: {
@@ -375,8 +395,17 @@ export default function CourseForm({ course, onUpdate }: CourseFormProps) {
           body: JSON.stringify(dataToSubmit),
         });
 
+        console.log(`CourseForm: PUT response status: ${response.status}`);
+
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorText = await response.text();
+          console.error(`CourseForm: PUT request failed:`, errorText);
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: errorText };
+          }
           throw new Error(errorData.error || "Failed to update course");
         }
 
