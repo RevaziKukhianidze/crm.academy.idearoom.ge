@@ -11,12 +11,16 @@ export async function GET(request: NextRequest) {
   const id = url.searchParams.get("id");
   const limitParam = url.searchParams.get("limit");
 
+  console.log(`API: GET request - id: ${id}, limit: ${limitParam}`);
+
   if (id) {
     // Get a specific course
     const courseId = parseInt(id, 10);
+    console.log(`API: Requested course ID: ${id}, parsed as: ${courseId}`);
 
     // Check if id is valid
     if (isNaN(courseId)) {
+      console.log(`API: Invalid course ID: ${id}`);
       return NextResponse.json({ error: "Invalid course ID" }, { status: 400 });
     }
 
@@ -26,14 +30,22 @@ export async function GET(request: NextRequest) {
       .eq("id", courseId)
       .maybeSingle();
 
+    console.log(`API: Supabase query result for ID ${courseId}:`, {
+      data,
+      error,
+    });
+
     if (error) {
+      console.error(`API: Supabase error for course ID ${courseId}:`, error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     if (!data) {
+      console.log(`API: Course not found for ID ${courseId}`);
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
+    console.log(`API: Successfully found course for ID ${courseId}`);
     return NextResponse.json(data);
   } else {
     // Get all courses
@@ -51,7 +63,11 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query;
 
+    console.log(`API: Retrieved ${data?.length || 0} courses from database`);
+    console.log(`API: Course IDs in database:`, data?.map((c) => c.id) || []);
+
     if (error) {
+      console.error("API: Error fetching all courses:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 

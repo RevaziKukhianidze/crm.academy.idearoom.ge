@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PlusCircle } from "lucide-react";
 import CacheClearButton from "@/components/cache-clear-button";
-import { createClient } from "../../../../supabase/server";
 import { supabase } from "../../../../supabase/client";
 import { Blog } from "@/types/blog";
 
@@ -32,29 +31,22 @@ export default function BlogsPage() {
     }
   }, [router]);
 
-  // Data fetching from Supabase
+  // Data fetching via API route to get parsed tags
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Option 1: Using server-side client
-        const supabaseClient = await createClient();
-        const { data: fetchedBlogs, error } = await supabaseClient
-          .from("blogs")
-          .select("*")
-          .order("created_at", { ascending: false });
+        // Use API route to get properly parsed tags
+        const response = await fetch("/api/blogs");
 
-        // Option 2: Using browser client (uncomment if needed)
-        // const { data: fetchedBlogs, error } = await supabase
-        //   .from("blogs")
-        //   .select("*")
-        //   .order("created_at", { ascending: false });
-
-        if (error) {
-          console.error("Error fetching blogs:", error);
-          setBlogs([]); // Set empty array on error
-        } else {
-          setBlogs(fetchedBlogs || []);
+        if (!response.ok) {
+          console.error("Error fetching blogs:", response.statusText);
+          setBlogs([]);
+          return;
         }
+
+        const fetchedBlogs = await response.json();
+        console.log("Fetched blogs with parsed tags:", fetchedBlogs); // Debug log
+        setBlogs(fetchedBlogs || []);
       } catch (err) {
         console.error("Error fetching data:", err);
         setBlogs([]);

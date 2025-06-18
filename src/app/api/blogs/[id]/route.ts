@@ -3,6 +3,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { clearBlogsCache } from "../../../../utils/cacheInvalidation";
 import { revalidatePath } from "next/cache";
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = await createClient();
+  const id = params.id;
+
+  try {
+    const { data, error } = await supabase
+      .from("blogs")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    if (!data) {
+      return NextResponse.json({ error: "Blog not found" }, { status: 404 });
+    }
+
+    // Return blog data with linkTag
+    const blogData = {
+      ...data,
+      linkTag: data.linkTag || [],
+    };
+
+    return NextResponse.json(blogData);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -11,14 +48,14 @@ export async function PUT(
   const id = params.id;
 
   try {
-    const body = await request.json();
-    const { title, text, image, tags, image_file_path, image_file_name } = body;
+    const { title, text, image, linkTag, image_file_path, image_file_name } =
+      await request.json();
 
     if (
       !title &&
       !text &&
       !image &&
-      !tags &&
+      !linkTag &&
       !image_file_path &&
       !image_file_name
     ) {
@@ -32,7 +69,22 @@ export async function PUT(
     if (title) updates.title = title;
     if (text) updates.text = text;
     if (image !== undefined) updates.image = image;
-    if (tags !== undefined) updates.tags = tags;
+
+    // Normalise linkTag: treat empty arrays as null so the previous value is
+    // actually removed from the database. Also keep the legacy `tags` column
+    // in sync for the public site until it migrates to the new field.
+    if (linkTag !== undefined) {
+      // For JSON column, use empty array instead of null
+      const normalisedLinkTag = Array.isArray(linkTag) ? linkTag : [];
+
+      updates.linkTag = normalisedLinkTag;
+      // For legacy tags column, use null if empty array
+      updates.tags =
+        normalisedLinkTag.length > 0
+          ? normalisedLinkTag.map((tag) => tag.name || tag)
+          : null;
+    }
+
     if (image_file_path !== undefined)
       updates.image_file_path = image_file_path;
     if (image_file_name !== undefined)
@@ -53,6 +105,12 @@ export async function PUT(
       return NextResponse.json({ error: "Blog not found" }, { status: 404 });
     }
 
+    // Return blog data with linkTag
+    const blogData = {
+      ...data,
+      linkTag: data.linkTag || [],
+    };
+
     // Invalidate all related paths in admin
     revalidatePath("/");
     revalidatePath("/dashboard/blogs");
@@ -60,7 +118,7 @@ export async function PUT(
     // Clear main site cache for all blog-related pages
     await clearBlogsCache(id);
 
-    return NextResponse.json(data);
+    return NextResponse.json(blogData);
   } catch (error) {
     return NextResponse.json(
       { error: "Invalid request body" },

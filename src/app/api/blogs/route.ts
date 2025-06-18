@@ -26,7 +26,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Blog not found" }, { status: 404 });
     }
 
-    return NextResponse.json(data);
+    // Return blog data with linkTag
+    const blogData = {
+      ...data,
+      linkTag: data.linkTag || [],
+    };
+
+    return NextResponse.json(blogData);
   } else {
     // Get all blog posts
     const { data, error } = await supabase
@@ -38,7 +44,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json(data);
+    // Return blogs data with linkTags
+    const blogsData =
+      data?.map((blog) => ({
+        ...blog,
+        linkTag: blog.linkTag || [],
+      })) || [];
+
+    return NextResponse.json(blogsData);
   }
 }
 
@@ -47,7 +60,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, text, image, tags, image_file_path, image_file_name } = body;
+    const { title, text, image, linkTag, image_file_path, image_file_name } =
+      body;
 
     if (!title || !text) {
       return NextResponse.json(
@@ -56,6 +70,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Convert linkTag to JSON format for database storage
+    const linkTagArray = Array.isArray(linkTag) ? linkTag : [];
+
+    // For backwards-compatibility with the old "tags" column that the main
+    // academy website still relies on, we mirror the value in that column as
+    // well until the front-end is migrated. Remove once the main site switches
+    // to `linkTag`.
+    const legacyTagsArray =
+      linkTagArray.length > 0
+        ? linkTagArray.map((tag) => tag.name || tag)
+        : null;
+
     const { data, error } = await supabase
       .from("blogs")
       .insert([
@@ -63,7 +89,8 @@ export async function POST(request: NextRequest) {
           title,
           text,
           image,
-          tags,
+          linkTag: linkTagArray,
+          tags: legacyTagsArray,
           image_file_path,
           image_file_name,
         },

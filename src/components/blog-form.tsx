@@ -2,14 +2,28 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Blog, BlogFormData } from "@/types/blog";
+import { Blog, BlogFormData, BlogTag } from "@/types/blog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "../../supabase/client";
-import { X, Upload, Image as ImageIcon } from "lucide-react";
+import {
+  X,
+  Upload,
+  Image as ImageIcon,
+  Plus,
+  Link,
+  ExternalLink,
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { v4 as uuidv4 } from "uuid";
 
 interface BlogFormProps {
@@ -18,19 +32,41 @@ interface BlogFormProps {
 }
 
 export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
+  // Helper function to ensure tags are in correct format
+  const ensureTagFormat = (tag: any): BlogTag => {
+    if (typeof tag === "string") {
+      if (tag.includes(":::")) {
+        const [name, url] = tag.split(":::");
+        return { name, url: url || undefined };
+      }
+      return { name: tag, url: undefined };
+    }
+    return tag;
+  };
+
+  // Helper function to convert old string array tags to new BlogTag format
+  const convertTagsToNewFormat = (tags?: (BlogTag | string)[]): BlogTag[] => {
+    if (!tags || tags.length === 0) return [];
+    return tags.map((tag) => {
+      return ensureTagFormat(tag);
+    });
+  };
+
   const initialData: BlogFormData = {
     title: blog?.title || "",
     text: blog?.text || "",
     image: blog?.image || "",
     image_file_path: blog?.image_file_path || "",
     image_file_name: blog?.image_file_name || "",
-    tags: blog?.tags || [],
+    linkTag: convertTagsToNewFormat(blog?.linkTag),
   };
 
   const [formData, setFormData] = useState<BlogFormData>(initialData);
-  const [tagInput, setTagInput] = useState("");
+  const [linkTagName, setLinkTagName] = useState("");
+  const [linkTagUrl, setLinkTagUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,20 +79,34 @@ export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleAddTag = () => {
-    if (tagInput.trim() && !formData.tags?.includes(tagInput.trim())) {
-      setFormData((prev) => ({
-        ...prev,
-        tags: [...(prev.tags || []), tagInput.trim()],
-      }));
-      setTagInput("");
+  const handleAddLinkTag = () => {
+    if (linkTagName.trim() && linkTagUrl.trim()) {
+      // Check if linkTag with same name already exists
+      const linkTagExists = formData.linkTag?.some(
+        (tag) => tag.name === linkTagName.trim()
+      );
+
+      if (!linkTagExists) {
+        setFormData((prev) => ({
+          ...prev,
+          linkTag: [
+            ...(prev.linkTag || []),
+            {
+              name: linkTagName.trim(),
+              url: linkTagUrl.trim() || undefined,
+            },
+          ],
+        }));
+        setLinkTagName("");
+        setLinkTagUrl("");
+      }
     }
   };
 
-  const handleRemoveTag = (tagToRemove: string) => {
+  const handleRemoveLinkTag = (linkTagToRemove: BlogTag) => {
     setFormData((prev) => ({
       ...prev,
-      tags: prev.tags?.filter((tag) => tag !== tagToRemove),
+      linkTag: prev.linkTag?.filter((tag) => tag.name !== linkTagToRemove.name),
     }));
   };
 
@@ -115,6 +165,7 @@ export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setSuccess(null);
 
     try {
       // Create a copy of formData to submit
@@ -135,9 +186,17 @@ export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
           throw new Error(errorData.error || "Failed to update blog");
         }
 
+        setSuccess("ბლოგი წარმატებით განახლდა!");
+
         // Call onUpdate callback if provided (for edit mode)
         if (onUpdate) {
+          // Call immediately, don't wait
           onUpdate();
+
+          // Clear success message after delay
+          setTimeout(() => {
+            setSuccess(null);
+          }, 3000);
           return; // Don't navigate since onUpdate handles refresh
         }
       } else {
@@ -154,10 +213,13 @@ export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
           const errorData = await response.json();
           throw new Error(errorData.error || "Failed to create blog");
         }
-      }
 
-      router.push("/dashboard/blogs");
-      router.refresh();
+        setSuccess("ბლოგი წარმატებით შეიქმნა!");
+
+        setTimeout(() => {
+          router.push("/dashboard/blogs");
+        }, 1500);
+      }
     } catch (err: any) {
       console.error("Error saving blog:", err);
       setError(err.message || "Failed to save blog post");
@@ -173,6 +235,12 @@ export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
           {error && (
             <div className="bg-destructive/10 text-destructive p-3 rounded-md">
               {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="bg-green-50 text-green-700 p-3 rounded-md border border-green-200">
+              {success}
             </div>
           )}
 
@@ -271,42 +339,82 @@ export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="tags">ტეგები</Label>
-            <div className="flex gap-2">
-              <Input
-                id="tagInput"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                placeholder="დაამატეთ ტეგი"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddTag();
-                  }
-                }}
-              />
-              <Button type="button" onClick={handleAddTag} variant="secondary">
-                დამატება
-              </Button>
+          <div className="space-y-4">
+            <Label htmlFor="linkTags">ლინკ ტეგები</Label>
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                <Input
+                  id="linkTagName"
+                  value={linkTagName}
+                  onChange={(e) => setLinkTagName(e.target.value)}
+                  placeholder="ლინკ ტეგის სახელი"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddLinkTag();
+                    }
+                  }}
+                />
+                <Input
+                  id="linkTagUrl"
+                  value={linkTagUrl}
+                  onChange={(e) => setLinkTagUrl(e.target.value)}
+                  placeholder="ლინკ ტეგის URL"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddLinkTag();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  onClick={handleAddLinkTag}
+                  variant="secondary"
+                  disabled={!linkTagName.trim() || !linkTagUrl.trim()}
+                >
+                  <Plus size={16} />
+                  დამატება
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                ლინკ ტეგები - სახელი და URL
+              </p>
             </div>
-            {formData.tags && formData.tags.length > 0 && (
+            {formData.linkTag && formData.linkTag.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
-                {formData.tags.map((tag, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center bg-secondary text-secondary-foreground px-3 py-1 rounded-full text-sm"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="ml-2 text-secondary-foreground/70 hover:text-secondary-foreground"
+                {formData.linkTag.map((linkTag, index) => {
+                  return (
+                    <div
+                      key={index}
+                      className="flex items-center rounded-full text-sm gap-2 relative group"
                     >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+                      {linkTag.url ? (
+                        <a
+                          href={linkTag.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center border px-3 py-1 rounded-full gap-2 transition-colors bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                          title={`ღია ლინკი: ${linkTag.url}`}
+                        >
+                          <span>{linkTag.name}</span>
+                          <ExternalLink size={12} />
+                        </a>
+                      ) : (
+                        <div className="flex items-center border px-3 py-1 rounded-full gap-2 transition-colors bg-green-50 text-green-700 border-green-200">
+                          <span>{linkTag.name}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveLinkTag(linkTag)}
+                        className="ml-1 text-secondary-foreground/70 hover:text-secondary-foreground bg-white border border-gray-200 rounded-full p-1 hover:bg-gray-50"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

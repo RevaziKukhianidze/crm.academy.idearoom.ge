@@ -11,12 +11,15 @@ export async function PUT(
   const supabase = await createClient();
   const id = parseInt(params.id, 10);
 
+  console.log(
+    `PUT API: Updating course with ID: ${params.id}, parsed as: ${id}`
+  );
+
   // Check if id is valid
   if (isNaN(id)) {
+    console.log(`PUT API: Invalid course ID: ${params.id}`);
     return NextResponse.json({ error: "Invalid course ID" }, { status: 400 });
   }
-
-  console.log(123);
 
   try {
     const body = await request.json();
@@ -82,17 +85,23 @@ export async function PUT(
     if (courseIcon !== undefined) updates.courseIcon = courseIcon;
     if (section_image !== undefined) updates.section_image = section_image;
 
+    console.log(`PUT API: Updating course ${id} with data:`, updates);
+
     const { data, error } = await supabase
       .from("courses")
       .update(updates)
       .eq("id", id)
       .select();
 
+    console.log(`PUT API: Supabase update result:`, { data, error });
+
     if (error) {
+      console.error(`PUT API: Supabase error for course ${id}:`, error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     if (!data || data.length === 0) {
+      console.log(`PUT API: Course not found for ID ${id}`);
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
