@@ -25,10 +25,18 @@ export async function GET(
       return NextResponse.json({ error: "Blog not found" }, { status: 404 });
     }
 
-    // Return blog data with linkTag
+    // Return blog data with linkTag parsed from JSON strings
     const blogData = {
       ...data,
-      linkTag: data.linkTag || [],
+      linkTag: data.linkTag
+        ? data.linkTag.map((tag: any) => {
+            try {
+              return typeof tag === "string" ? JSON.parse(tag) : tag;
+            } catch {
+              return tag; // Return as is if not valid JSON
+            }
+          })
+        : [],
     };
 
     return NextResponse.json(blogData);
@@ -54,8 +62,8 @@ export async function PUT(
     if (
       !title &&
       !text &&
-      !image &&
-      !linkTag &&
+      image === undefined &&
+      linkTag === undefined &&
       !image_file_path &&
       !image_file_name
     ) {
@@ -70,19 +78,19 @@ export async function PUT(
     if (text) updates.text = text;
     if (image !== undefined) updates.image = image;
 
-    // Normalise linkTag: treat empty arrays as null so the previous value is
-    // actually removed from the database. Also keep the legacy `tags` column
-    // in sync for the public site until it migrates to the new field.
+    // Handle linkTag for text[] column - convert objects to JSON strings
     if (linkTag !== undefined) {
-      // For JSON column, use empty array instead of null
       const normalisedLinkTag = Array.isArray(linkTag) ? linkTag : [];
 
-      updates.linkTag = normalisedLinkTag;
-      // For legacy tags column, use null if empty array
-      updates.tags =
-        normalisedLinkTag.length > 0
-          ? normalisedLinkTag.map((tag) => tag.name || tag)
-          : null;
+      // For text[] column, use null if empty array, otherwise stringify objects
+      if (normalisedLinkTag.length === 0) {
+        updates.linkTag = null;
+      } else {
+        const stringifiedTags = normalisedLinkTag.map((tag) =>
+          typeof tag === "string" ? tag : JSON.stringify(tag)
+        );
+        updates.linkTag = stringifiedTags;
+      }
     }
 
     if (image_file_path !== undefined)
@@ -105,10 +113,18 @@ export async function PUT(
       return NextResponse.json({ error: "Blog not found" }, { status: 404 });
     }
 
-    // Return blog data with linkTag
+    // Return blog data with linkTag parsed from JSON strings
     const blogData = {
       ...data,
-      linkTag: data.linkTag || [],
+      linkTag: data.linkTag
+        ? data.linkTag.map((tag: any) => {
+            try {
+              return typeof tag === "string" ? JSON.parse(tag) : tag;
+            } catch {
+              return tag; // Return as is if not valid JSON
+            }
+          })
+        : [],
     };
 
     // Invalidate all related paths in admin
@@ -139,13 +155,6 @@ export async function DELETE(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-
-  // Invalidate all related paths in admin
-  revalidatePath("/");
-  revalidatePath("/dashboard/blogs");
-
-  // Clear main site cache for all blog-related pages
-  await clearBlogsCache(id);
 
   return NextResponse.json({ success: true });
 }

@@ -34,6 +34,7 @@ interface FormValues {
   text: string;
   image: string;
   course_id: string | null; // Added course_id instead of button_link
+  custom_url: string; // ხელით შეყვანილი URL
 }
 
 interface SliderData {
@@ -41,6 +42,7 @@ interface SliderData {
   text: string | null;
   image: string | null;
   course_id: number | null; // Changed from button_link to course_id
+  custom_url: string | null; // ხელით შეყვანილი URL
 }
 
 interface SliderFormProps {
@@ -66,6 +68,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
       text: "",
       image: "",
       course_id: null, // Initialize as null
+      custom_url: "", // Initialize as an empty string
     },
   });
 
@@ -295,6 +298,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
           if (data) {
             // Check if there's a button_link that contains a course ID
             let courseId = null;
+            let customUrlFromButtonLink = null;
 
             if (data.button_link) {
               // Handle both old and new formats
@@ -303,6 +307,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                 const matches = data.button_link.match(/\/offers\/(\d+)/);
                 if (matches && matches[1]) {
                   courseId = matches[1];
+                  customUrlFromButtonLink = matches[1]; // ნომერი custom_url ველისთვის
                   console.log(
                     "Extracted course ID from old button_link format:",
                     courseId
@@ -313,6 +318,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                 const matches = data.button_link.match(/\/offer\/(\d+)/);
                 if (matches && matches[1]) {
                   courseId = matches[1];
+                  customUrlFromButtonLink = matches[1]; // ნომერი custom_url ველისთვის
                   console.log(
                     "Extracted course ID from old button_link format:",
                     courseId
@@ -323,6 +329,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                 const matches = data.button_link.match(/\/courses\/(\d+)/);
                 if (matches && matches[1]) {
                   courseId = matches[1];
+                  customUrlFromButtonLink = matches[1]; // ნომერი custom_url ველისთვის
                   console.log(
                     "Extracted course ID from button_link:",
                     courseId
@@ -337,6 +344,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
               text: data.text || "",
               image: data.image || "",
               course_id: courseId,
+              custom_url: customUrlFromButtonLink || "", // ახლა custom_url ავსდება button_link-დან
             });
 
             if (data.image) {
@@ -446,15 +454,14 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
     setSuccess(null);
 
     try {
-      // ✨ სპეციალური შემოწმება - ჯერ დავრწმუნდეთ, რომ კურსი ნაპოვნია
+      // ✨ ავტომატური კურსის კავშირის შემოწმება (მხოლოდ ინფორმაციისთვის)
       let finalCourseId: number | null = null;
       let foundMatch = false;
       let matchedCourseName = "";
 
-      console.log("🔍 შემოწმება: მიმდინარეობს matched course-ის ძიება...");
+      console.log("🔍 შემოწმება: ავტომატური კურსის კავშირის ანალიზი...");
 
       if (data.title && data.title.trim()) {
-        // ✨ ვიპოვოთ კურსი ზუსტი (case-insensitive) დამთხვევით
         const matchedCourse = courses.find(
           (course) =>
             course.title.toLowerCase() === data.title.trim().toLowerCase()
@@ -465,16 +472,12 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
           foundMatch = true;
           matchedCourseName = matchedCourse.title;
 
-          // ახალი ფორმატი: /courses/{id}
-          const newLink = `/courses/${matchedCourse.id}`;
-
-          console.log("✅ კურსი ნაპოვნია:", {
+          console.log("✅ კურსი ნაპოვნია ავტომატურად:", {
             title: matchedCourse.title,
             id: matchedCourse.id,
-            link: newLink,
+            link: `/courses/${matchedCourse.id}`,
           });
 
-          // ✨ ვადასტურებთ, რომ course_id დაყენებულია
           form.setValue("course_id", String(matchedCourse.id));
         } else {
           console.log("❌ სათაურით კურსი ვერ მოიძებნა:", data.title.trim());
@@ -482,10 +485,8 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
           form.setValue("course_id", null);
         }
       } else if (data.course_id) {
-        // თუ course_id უკვე დაყენებულია, მაგრამ სათაური არ ემთხვევა
         finalCourseId = parseInt(data.course_id);
 
-        // ✨ ვადასტურებთ რომ course_id ვალიდურია
         const validCourse = courses.find(
           (course) => course.id === finalCourseId
         );
@@ -504,21 +505,18 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
         }
       }
 
-      // საბოლოო შემოწმება - კონფირმაცია მომხმარებლისთვის
-      if (foundMatch) {
-        console.log(
-          `✅ დადასტურებული კავშირი: "${matchedCourseName}" (ID: ${finalCourseId})`
-        );
-      } else {
-        console.log("❌ კურსთან კავშირი ვერ მოიძებნა");
-      }
+      console.log("📋 მონაცემების შემოწმება:", {
+        customUrl: data.custom_url?.trim() || "არ არის",
+        autoMatchedCourse: foundMatch ? matchedCourseName : "არ არის",
+      });
 
-      // Create the data object to submit
+      // Create the data object to submit - ორივე ველი (course_id და custom_url) გადაიგზავნება
       const sliderData: SliderData = {
         title: data.title.trim() || null,
         text: data.text.trim() || null,
         image: data.image.trim() || null,
         course_id: finalCourseId,
+        custom_url: data.custom_url?.trim() || null, // ახლა მხოლოდ ნომერი გადაიგზავნება
       };
 
       // LOG EVERYTHING FOR DEBUGGING
@@ -538,12 +536,22 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
       const jsonData = JSON.stringify(sliderData);
       console.log("🚀 საბოლოო მონაცემები სერვერზე გასაგზავნად:", jsonData);
 
-      // ✨ წარმატების შემთხვევაში გამოვაჩინოთ კურსის კავშირის ინფორმაცია
-      const successMessage = foundMatch
-        ? `სლაიდერი ${isEditMode ? "განახლდა" : "შეიქმნა"} და დაკავშირდა კურსთან: "${matchedCourseName}"`
-        : isEditMode
+      // ✨ წარმატების შემთხვევაში გამოვაჩინოთ URL/კურსის კავშირის ინფორმაცია
+      let successMessage;
+      const hasCustomUrl = data.custom_url?.trim();
+      const hasAutoMatch = foundMatch;
+
+      if (hasCustomUrl && hasAutoMatch) {
+        successMessage = `სლაიდერი ${isEditMode ? "განახლდა" : "შეიქმნა"}. კურსის ID: ${hasCustomUrl} (ასევე ავტომატური კავშირი: "${matchedCourseName}")`;
+      } else if (hasCustomUrl) {
+        successMessage = `სლაიდერი ${isEditMode ? "განახლდა" : "შეიქმნა"} კურსის ID-ით: ${hasCustomUrl}`;
+      } else if (hasAutoMatch) {
+        successMessage = `სლაიდერი ${isEditMode ? "განახლდა" : "შეიქმნა"} და დაკავშირდა კურსთან: "${matchedCourseName}"`;
+      } else {
+        successMessage = isEditMode
           ? "სლაიდერი წარმატებით განახლდა"
           : "სლაიდერი წარმატებით შეიქმნა";
+      }
 
       if (isEditMode && sliderId) {
         console.log(`🔄 მიმდინარეობს სლაიდერის განახლება ID-ით: ${sliderId}`);
@@ -681,6 +689,37 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                         {...field}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="custom_url"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-base">
+                      კურსის ID (არასავალდებულო)
+                    </FormLabel>
+                    <FormControl>
+                      <div className="flex items-center">
+                        <span className="px-3 py-2 bg-muted text-muted-foreground border border-r-0 rounded-l-md h-12 flex items-center">
+                          /courses/
+                        </span>
+                        <Input
+                          placeholder="123"
+                          {...field}
+                          className="h-12 rounded-l-none"
+                          type="number"
+                          min="1"
+                        />
+                      </div>
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      შეიყვანეთ მხოლოდ კურსის ID ნომერი. თუ შეავსებთ, ის უფრო
+                      მაღალ პრიორიტეტს ღებულობს ვიდრე ავტომატური კურსის კავშირი
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}

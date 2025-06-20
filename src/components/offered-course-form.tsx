@@ -884,44 +884,6 @@ export default function OfferedCourseForm({
         </CardContent>
       </Card>
 
-      {/* Course Categories */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="space-y-4">
-            <Label>კურსის კატეგორიები</Label>
-            {formData.course_category.map((category, index) => (
-              <div key={`category-${index}`} className="flex gap-2">
-                <Input
-                  value={category}
-                  onChange={(e) =>
-                    handleArrayChange("course_category", index, e.target.value)
-                  }
-                  placeholder="კატეგორია"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeArrayItem("course_category", index)}
-                  disabled={formData.course_category.length === 1}
-                >
-                  <X size={16} />
-                </Button>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1"
-              onClick={() => addArrayItem("course_category")}
-            >
-              <Plus size={16} /> კატეგორიის დამატება
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Course Details */}
       <Card>
         <CardContent className="pt-6">

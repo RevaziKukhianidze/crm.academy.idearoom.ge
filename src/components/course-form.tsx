@@ -858,7 +858,7 @@ export default function CourseForm({ course, onUpdate }: CourseFormProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="lesson_time">
-                გაკვეთილის ხანგრძლივობა (წუთები)
+                გაკვეთილის ხანგრძლივობა (საათები)
               </Label>
               <Input
                 id="lesson_time"
