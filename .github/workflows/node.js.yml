@@ -19,13 +19,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
-      - run: npm ci
-      - run: PORT=3001 npm run build --if-present
+
+      - name: Clean previous build
+        run: rm -rf .next node_modules
+ 
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: PORT=3001 npm run build --if-present
 
       - name: Deploy
         run: |
