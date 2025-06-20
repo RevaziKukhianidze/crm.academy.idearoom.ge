@@ -39,7 +39,7 @@ export async function PUT(
   try {
     // Parse the request body
     const body = await request.json();
-    const { title, text, image, course_id } = body;
+    const { title, text, image, course_id, custom_url } = body;
 
     // Log data for debugging
     console.log("🔷 API Route: მიმდინარეობს სლაიდერის განახლება");
@@ -50,6 +50,7 @@ export async function PUT(
       text?.substring(0, 30) + (text?.length > 30 ? "..." : "")
     );
     console.log("🔢 კურსის ID:", course_id);
+    console.log("🔗 ხელით შეყვანილი კურსის ID:", custom_url);
     console.log("🖼️ სურათი არსებობს:", !!image);
     console.log("🔢 კურსის ID ტიპი:", typeof course_id);
     console.log("📊 მთლიანი მოთხოვნის ობიექტი:", Object.keys(body).join(", "));
@@ -67,8 +68,18 @@ export async function PUT(
       button_link: null, // Will be set based on course_id
     };
 
-    // Set button_link based on course_id with thorough validation
-    if (course_id !== undefined && course_id !== null) {
+    // Set button_link: ორივე ველიდან შეიძლება კურსის ID მივიღოთ
+    if (custom_url && custom_url.trim()) {
+      // ხელით შეყვანილი კურსის ID (/courses/ + ID)
+      const courseIdFromCustom = custom_url.trim();
+      const buttonLink = `/courses/${courseIdFromCustom}`;
+      sliderData.button_link = buttonLink;
+      console.log(
+        "✅ button_link დაყენებულია ხელით შეყვანილი კურსის ID-ით:",
+        buttonLink
+      );
+    } else if (course_id !== undefined && course_id !== null) {
+      // თუ custom URL არ არის, ვიყენებთ ავტომატურ კურსის კავშირს
       const courseIdNum = Number(course_id);
 
       if (!isNaN(courseIdNum) && courseIdNum > 0) {
@@ -103,7 +114,9 @@ export async function PUT(
         console.log("⚠️ არავალიდური course_id ფორმატი:", course_id);
       }
     } else {
-      console.log("ℹ️ course_id არ არსებობს, button_link იქნება null");
+      console.log(
+        "ℹ️ არც custom_url არ არის არც course_id, button_link იქნება null"
+      );
     }
 
     console.log("🔹 განახლებული მონაცემები:", {

@@ -73,14 +73,10 @@ export async function POST(request: NextRequest) {
     // Convert linkTag to JSON format for database storage
     const linkTagArray = Array.isArray(linkTag) ? linkTag : [];
 
-    // For backwards-compatibility with the old "tags" column that the main
-    // academy website still relies on, we mirror the value in that column as
-    // well until the front-end is migrated. Remove once the main site switches
-    // to `linkTag`.
-    const legacyTagsArray =
-      linkTagArray.length > 0
-        ? linkTagArray.map((tag) => tag.name || tag)
-        : null;
+    // Convert each tag object to JSON string for text[] column
+    const stringifiedTags = linkTagArray.map((tag) =>
+      typeof tag === "string" ? tag : JSON.stringify(tag)
+    );
 
     const { data, error } = await supabase
       .from("blogs")
@@ -89,8 +85,7 @@ export async function POST(request: NextRequest) {
           title,
           text,
           image,
-          linkTag: linkTagArray,
-          tags: legacyTagsArray,
+          linkTag: stringifiedTags.length > 0 ? stringifiedTags : null,
           image_file_path,
           image_file_name,
         },

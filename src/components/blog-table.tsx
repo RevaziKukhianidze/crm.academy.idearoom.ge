@@ -183,7 +183,6 @@ export default function BlogTable({ initialBlogs }: BlogTableProps) {
             title: "წარმატება",
             description: "ბლოგი წარმატებით წაიშალა",
           });
-          router.refresh();
         }
       } catch (err) {
         console.error("ბლოგის წაშლის შეცდომა:", err);

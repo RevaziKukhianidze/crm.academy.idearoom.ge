@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Blog, BlogFormData, BlogTag } from "@/types/blog";
 import { Button } from "@/components/ui/button";
@@ -72,11 +72,29 @@ export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
+  // Update formData when blog prop changes (for edit mode)
+  useEffect(() => {
+    if (blog) {
+      const updatedData: BlogFormData = {
+        title: blog.title || "",
+        text: blog.text || "",
+        image: blog.image || "",
+        image_file_path: blog.image_file_path || "",
+        image_file_name: blog.image_file_name || "",
+        linkTag: convertTagsToNewFormat(blog.linkTag),
+      };
+      setFormData(updatedData);
+    }
+  }, [blog]);
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    // Clear any previous errors/success messages when form changes
+    if (error) setError(null);
+    if (success) setSuccess(null);
   };
 
   const handleAddLinkTag = () => {
@@ -93,13 +111,19 @@ export default function BlogForm({ blog, onUpdate }: BlogFormProps) {
             ...(prev.linkTag || []),
             {
               name: linkTagName.trim(),
-              url: linkTagUrl.trim() || undefined,
+              url: linkTagUrl.trim(),
             },
           ],
         }));
         setLinkTagName("");
         setLinkTagUrl("");
+      } else {
+        setError("ამ სახელით ლინკ ტეგი უკვე არსებობს");
+        setTimeout(() => setError(null), 3000);
       }
+    } else {
+      setError("ლინკ ტეგის სახელი და URL აუცილებელია");
+      setTimeout(() => setError(null), 3000);
     }
   };
 
