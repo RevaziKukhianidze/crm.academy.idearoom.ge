@@ -1,4 +1,4 @@
-import { createClient } from "../../../../supabase/server";
+import { createClient, createAdminClient } from "../../../../supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { clearCoursesCache } from "../../../utils/cacheInvalidation";
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
+  const supabase = await createAdminClient();
 
   try {
     const body = await request.json();

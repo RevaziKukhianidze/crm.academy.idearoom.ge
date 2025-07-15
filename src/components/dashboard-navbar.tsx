@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   GraduationCap,
   Sliders,
+  Users,
 } from "lucide-react";
 import { ThemeToggle } from "./ui/theme-toggle";
 import { usePathname } from "next/navigation";
@@ -105,6 +106,17 @@ export default function DashboardNavbar({
               } flex items-center gap-1 transition-colors`}
             >
               შეფასებები
+            </Link>
+            <Link
+              href="/dashboard/users"
+              className={`text-sm font-medium ${
+                isActive("/dashboard/users")
+                  ? "text-primary"
+                  : "text-foreground/70 hover:text-primary"
+              } flex items-center gap-1 transition-colors`}
+            >
+              <Users className="h-4 w-4 mr-1" />
+              მომხმარებლები
             </Link>
             <Link
               href="/dashboard/sliders"
