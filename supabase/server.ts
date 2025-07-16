@@ -26,3 +26,37 @@ export const createClient = async () => {
     throw error;
   }
 };
+
+// Admin client with service role for bypassing RLS in admin operations
+export const createAdminClient = async () => {
+  console.log(
+    "Creating Supabase ADMIN client with URL:",
+    process.env.NEXT_PUBLIC_SUPABASE_URL ? "Defined" : "Undefined"
+  );
+  console.log(
+    "Creating Supabase ADMIN client with SERVICE KEY:",
+    process.env.SUPABASE_SERVICE_ROLE_KEY ? "Defined" : "Undefined"
+  );
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("Missing Supabase admin environment variables");
+    // Fallback to regular client if service role is not available
+    console.log("Falling back to regular client with anon key");
+    return createClient();
+  }
+
+  try {
+    return createSupabaseClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating Supabase admin client:", error);
+    throw error;
+  }
+};

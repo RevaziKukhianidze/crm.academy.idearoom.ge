@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/card";
 import UserFormTable from "../../components/UserFormTable";
 import { createClient } from "../../../supabase/server";
+import { checkAuthAndMock } from "@/utils/auth-mock";
 
 // Define an interface based on your 'users_form' table schema
 interface UserForm {
@@ -44,20 +45,23 @@ export default function Dashboard() {
   const [coursesCount, setCoursesCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
 
-  // Authentication check
+  // Authentication check with Supabase mock
   useEffect(() => {
-    try {
-      const isAuthenticated = localStorage.getItem("isAuthenticated");
-
-      if (!isAuthenticated) {
+    const checkAuth = async () => {
+      try {
+        const isAuthenticated = await checkAuthAndMock();
+        if (!isAuthenticated) {
+          router.replace("/");
+        } else {
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Authentication check failed:", err);
         router.replace("/");
-      } else {
-        setLoading(false);
       }
-    } catch (err) {
-      console.error("localStorage is not available:", err);
-      router.replace("/");
-    }
+    };
+
+    checkAuth();
   }, [router]);
 
   // Data fetching from Supabase
@@ -251,7 +255,28 @@ export default function Dashboard() {
               მომხმარებლების მოთხოვნები
             </h2>
             {usersFormData.length > 0 ? (
-              <UserFormTable usersFormData={usersFormData} />
+              <UserFormTable
+                usersFormData={usersFormData}
+                onUserUpdate={() => {
+                  // Refresh the data without full page reload
+                  const fetchData = async () => {
+                    try {
+                      const supabase = await createClient();
+                      const { data: fetchedUsersFormData, error } =
+                        await supabase
+                          .from("users_form")
+                          .select("*")
+                          .order("created_at", { ascending: false });
+                      if (!error) {
+                        setUsersFormData(fetchedUsersFormData || []);
+                      }
+                    } catch (err) {
+                      console.error("Error refreshing data:", err);
+                    }
+                  };
+                  fetchData();
+                }}
+              />
             ) : (
               <div className="text-center p-8 text-muted-foreground">
                 მომხმარებლების მოთხოვნები არ მოიძებნა

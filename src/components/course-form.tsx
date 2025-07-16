@@ -18,6 +18,9 @@ interface CourseFormProps {
 }
 
 export default function CourseForm({ course, onUpdate }: CourseFormProps) {
+  console.log("🎨 CourseForm rendered with course:", course);
+  console.log("🎨 Course ID:", course?.id, "Type:", typeof course?.id);
+
   // Initialize form data (same as before)
   const initialCourseDetails = Array.isArray(course?.course_details)
     ? course.course_details
@@ -384,7 +387,10 @@ export default function CourseForm({ course, onUpdate }: CourseFormProps) {
 
       if (course && course.id) {
         // Update existing course using API route
-        console.log(`CourseForm: Updating course with ID: ${course.id}`);
+        console.log(
+          `CourseForm: Updating course with ID: ${course.id} (type: ${typeof course.id})`
+        );
+        console.log(`CourseForm: Full course object:`, course);
         console.log(`CourseForm: Request data:`, dataToSubmit);
 
         const response = await fetch(`/api/courses/${course.id}`, {

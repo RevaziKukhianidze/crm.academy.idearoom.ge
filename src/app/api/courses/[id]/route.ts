@@ -1,5 +1,8 @@
 import { log } from "console";
-import { createClient } from "../../../../../supabase/server";
+import {
+  createClient,
+  createAdminClient,
+} from "../../../../../supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { clearCoursesCache } from "../../../../utils/cacheInvalidation";
@@ -8,18 +11,44 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = await createClient();
+  // Create Supabase admin client to bypass RLS for admin operations
+  const supabase = await createAdminClient();
   const id = parseInt(params.id, 10);
 
   console.log(
-    `PUT API: Updating course with ID: ${params.id}, parsed as: ${id}`
+    `🔧 PUT API: Updating course with ID: ${params.id}, parsed as: ${id}`
   );
 
   // Check if id is valid
   if (isNaN(id)) {
-    console.log(`PUT API: Invalid course ID: ${params.id}`);
+    console.log(`❌ PUT API: Invalid course ID: ${params.id}`);
     return NextResponse.json({ error: "Invalid course ID" }, { status: 400 });
   }
+
+  // Debug: შევამოწმოთ თუ არსებობს კურსი PUT-ის წინ
+  const { data: existingCourse, error: checkError } = await supabase
+    .from("courses")
+    .select("id, title")
+    .eq("id", id)
+    .maybeSingle();
+
+  console.log(`🔍 PUT API: Checking if course exists:`, {
+    existingCourse,
+    checkError,
+  });
+
+  if (checkError) {
+    console.error(`❌ PUT API: Error checking course existence:`, checkError);
+  }
+
+  if (!existingCourse) {
+    console.log(`❌ PUT API: Course with ID ${id} does not exist in database`);
+    return NextResponse.json({ error: "Course not found" }, { status: 404 });
+  }
+
+  console.log(
+    `✅ PUT API: Course exists: ${existingCourse.title} (ID: ${existingCourse.id})`
+  );
 
   try {
     const body = await request.json();
@@ -85,7 +114,7 @@ export async function PUT(
     if (courseIcon !== undefined) updates.courseIcon = courseIcon;
     if (section_image !== undefined) updates.section_image = section_image;
 
-    console.log(`PUT API: Updating course ${id} with data:`, updates);
+    console.log(`🔧 PUT API: Updating course ${id} with data:`, updates);
 
     const { data, error } = await supabase
       .from("courses")
@@ -93,17 +122,28 @@ export async function PUT(
       .eq("id", id)
       .select();
 
-    console.log(`PUT API: Supabase update result:`, { data, error });
+    console.log(`🔧 PUT API: Supabase update result:`, { data, error });
 
     if (error) {
-      console.error(`PUT API: Supabase error for course ${id}:`, error);
+      console.error(`❌ PUT API: Supabase error for course ${id}:`, error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     if (!data || data.length === 0) {
-      console.log(`PUT API: Course not found for ID ${id}`);
-      return NextResponse.json({ error: "Course not found" }, { status: 404 });
+      console.log(
+        `❌ PUT API: Update returned no data for ID ${id} - this means the course was not found during update`
+      );
+      console.log(
+        `❌ PUT API: This could be RLS policy issue or the course was deleted between checks`
+      );
+      return NextResponse.json(
+        { error: "Course not found during update" },
+        { status: 404 }
+      );
     }
+
+    console.log(`✅ PUT API: Successfully updated course ${id}`);
+    console.log(`✅ PUT API: Updated course title: ${data[0]?.title}`);
 
     const updatedCourse = data[0];
 
@@ -129,7 +169,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = await createClient();
+  const supabase = await createAdminClient();
   const id = parseInt(params.id, 10);
 
   // Check if id is valid

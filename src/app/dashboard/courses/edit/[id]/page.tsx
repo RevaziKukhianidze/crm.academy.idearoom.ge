@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/components/dashboard-navbar";
 import CourseForm from "@/components/course-form";
+import { Button } from "@/components/ui/button";
 import { Course } from "../../../../../types/course";
 import { createClient } from "../../../../../../supabase/server";
 
@@ -17,59 +18,68 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
   // Function to fetch course data
   const fetchCourseData = async () => {
     try {
-      console.log(`Fetching course with ID: ${params.id}`);
-
-      // Fetch the course via API route to ensure consistent access
-      const response = await fetch(
-        `/api/courses?id=${params.id}&t=${Date.now()}`
+      console.log(
+        `🔍 Fetching course with ID: ${params.id} (type: ${typeof params.id})`
       );
 
-      console.log(`API response status: ${response.status}`);
+      const supabase = await createClient();
 
-      let courseData: any = null;
-      if (response.ok) {
-        const json = await response.json();
-        console.log("API response data:", json);
-        if (!json.error) {
-          courseData = json;
-        } else {
-          console.error("API returned error:", json.error);
-        }
-      } else {
-        const errorText = await response.text();
-        console.error("API request failed:", response.status, errorText);
+      // ჯერ შევამოწმოთ ყველა კურსი ბაზაში
+      const { data: allCourses, error: allError } = await supabase
+        .from("courses")
+        .select("*");
+
+      console.log(`📊 Total courses in database: ${allCourses?.length || 0}`);
+      console.log(
+        `📝 All course IDs:`,
+        allCourses?.map((c) => `${c.id} (${typeof c.id})`) || []
+      );
+
+      // Check if ID 47 exists in the array
+      const targetId = parseInt(params.id, 10);
+      const foundInArray = allCourses?.find((c) => c.id === targetId);
+      console.log(`🔎 Is ID ${targetId} in the courses array?`, !!foundInArray);
+
+      if (allError) {
+        console.error("❌ Error fetching all courses:", allError);
       }
 
-      // If API route failed (e.g., returns error or empty), fall back to direct Supabase query
-      if (!courseData) {
-        console.log("Falling back to direct Supabase query");
-        const supabase = await createClient();
-        const { data, error: fetchError } = await supabase
-          .from("courses")
-          .select("*")
-          .eq("id", parseInt(params.id, 10))
-          .maybeSingle();
+      // ახლა ვეძებთ კონკრეტულ კურსს
+      const courseId = parseInt(params.id, 10);
+      console.log(
+        `🎯 Searching for course ID: ${courseId} (parsed from "${params.id}")`
+      );
 
-        console.log("Supabase query result:", { data, error: fetchError });
+      const { data, error: fetchError } = await supabase
+        .from("courses")
+        .select("*")
+        .eq("id", courseId)
+        .maybeSingle();
 
-        if (fetchError) {
-          console.error("Supabase fallback error:", fetchError);
-        }
-        courseData = data;
-      }
+      console.log("📋 Supabase query result:", { data, error: fetchError });
+      console.log("📋 Detailed data object:", JSON.stringify(data, null, 2));
 
-      if (!courseData) {
-        console.error(
-          `Course not found through API or direct query for ID: ${params.id}`
-        );
-        router.replace("/dashboard/courses");
+      if (fetchError) {
+        console.error("❌ Supabase query error:", fetchError);
+        setError(`კურსის ძებნის დროს მოხდა შეცდომა: ${fetchError.message}`);
         return null;
       }
 
-      console.log("Successfully fetched course data:", courseData);
-      return courseData;
+      if (!data) {
+        console.error(
+          `❌ Course not found for ID: ${params.id} (parsed: ${courseId})`
+        );
+        setError(`კურსი ვერ მოიძებნა ID-ით: ${params.id}`);
+        return null;
+      }
+
+      console.log("✅ Successfully fetched course data:", data);
+      console.log("✅ Course title:", data.title);
+      console.log("✅ Course ID:", data.id);
+      return data;
     } catch (err) {
-      console.error("Error fetching course data:", err);
+      console.error("❌ Error fetching course data:", err);
+      setError(`კურსის ძებნის დროს მოხდა შეცდომა: ${err}`);
       return null;
     }
   };
@@ -85,9 +95,16 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
         }
 
         const courseData = await fetchCourseData();
+        console.log("🎯 After fetchCourseData, got:", courseData);
+
         if (courseData) {
+          console.log("🎯 Setting course to state:", courseData.title);
           setCourse(courseData);
+        } else {
+          console.log("❌ courseData is null/undefined, not setting course");
         }
+
+        console.log("🎯 Setting loading to false");
         setLoading(false);
       } catch (err) {
         console.error("Error in authentication or data fetching:", err);
@@ -109,10 +126,11 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
 
   const handleCourseUpdate = async () => {
     try {
-      // Clear any existing errors and show success message
+      // Clear any existing errors
       setError(null);
+      setSuccessMessage(null);
 
-      // Re-fetch the updated course data without showing loading spinner
+      // Re-fetch the updated course data to ensure UI is in sync
       const updatedCourseData = await fetchCourseData();
 
       if (updatedCourseData) {
@@ -124,13 +142,25 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
         setTimeout(() => {
           setSuccessMessage(null);
         }, 3000);
+      } else {
+        // If fetchCourseData failed, it will have set the error message
+        console.error("Failed to fetch updated course data");
       }
     } catch (err) {
-      console.error("Error updating course:", err);
+      console.error("Error in handleCourseUpdate:", err);
       setError("კურსის განახლების დროს მოხდა შეცდომა");
       setSuccessMessage(null);
     }
   };
+
+  console.log(
+    "🖥️ RENDER - loading:",
+    loading,
+    "error:",
+    error,
+    "course:",
+    course?.title || "no course"
+  );
 
   if (loading) {
     return (
@@ -143,10 +173,28 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md mx-auto">
           <h2 className="text-xl font-semibold mb-2">შეცდომა</h2>
-          <p className="text-muted-foreground">{error}</p>
-          <p className="text-sm mt-4">გადამისამართდება კურსების გვერდზე...</p>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">შესაძლო მიზეზები:</p>
+            <ul className="text-sm text-muted-foreground text-left space-y-1">
+              <li>• კურსი ID {params.id} ვერ მოიძებნა</li>
+              <li>• კურსები table ცარიელია</li>
+              <li>• ბაზასთან კავშირის პრობლემა</li>
+            </ul>
+            <div className="mt-4 space-x-2">
+              <Button
+                onClick={() => router.push("/dashboard/courses")}
+                variant="outline"
+              >
+                ← კურსების სია
+              </Button>
+              <Button onClick={() => router.push("/dashboard/courses/new")}>
+                + ახალი კურსი
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -166,8 +214,18 @@ export default function EditCoursePage({ params }: { params: { id: string } }) {
             </div>
           )}
 
-          {course && (
-            <CourseForm course={course} onUpdate={handleCourseUpdate} />
+          {course ? (
+            <>
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-md mb-4">
+                კურსი მოიძებნა: <strong>{course.title}</strong> (ID: {course.id}
+                )
+              </div>
+              <CourseForm course={course} onUpdate={handleCourseUpdate} />
+            </>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-md">
+              კურსი ჯერ არ არის ჩატვირთული...
+            </div>
           )}
         </div>
       </main>
