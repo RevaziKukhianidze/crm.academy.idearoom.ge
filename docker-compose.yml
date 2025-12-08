@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  crm-academy-idearoom:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crm-academy-idearoom
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
+      - NEXT_PUBLIC_TEMPO=${NEXT_PUBLIC_TEMPO}
+    networks:
+      - idearoom-network
+
+networks:
+  idearoom-network:
+    driver: bridge
+

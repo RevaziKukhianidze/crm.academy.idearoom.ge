@@ -1,8 +1,9 @@
-name: crm-idearoom-academy
+name: crm-academy-idearoom
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
 
 jobs:
   build:
@@ -13,9 +14,10 @@ jobs:
         node-version: [22.15.1]
 
     env:
-      NEXT_PUBLIC_SUPABASE_URL: ${{secrets.NEXT_PUBLIC_SUPABASE_URL}}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY}}
-      NEXT_PUBLIC_BASE_URL: ${{secrets.NEXT_PUBLIC_BASE_URL}}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
+      NEXT_PUBLIC_TEMPO: ${{ secrets.NEXT_PUBLIC_TEMPO }}
 
     steps:
       - uses: actions/checkout@v4
@@ -26,17 +28,51 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
 
-      - name: Clean previous build
-        run: rm -rf .next node_modules
- 
-      - name: Install dependencies
-        run: npm ci
+      # - name: Check Docker installation
+      #   run: |
+      #     docker --version || (echo "❌ Docker is not installed" && exit 1)
+      #     docker info || (echo "❌ Docker daemon is not running" && exit 1)
 
-      - name: Build
-        run: PORT=3001 npm run build --if-present
-
-      - name: Deploy
+      - name: Stop and remove existing container
         run: |
-          cd /home/idearoom-crm/actions-runner/_work/crm.academy.idearoom.ge/crm.academy.idearoom.ge
-          pm2 delete crm-academy-app || true
-          pm2 start npm --name "crm-academy-app" -- start
+          docker stop crm-academy-idearoom || true
+          docker rm crm-academy-idearoom || true
+          docker rmi crm-academy-idearoom:latest || true
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" \
+            --build-arg NEXT_PUBLIC_BASE_URL="${{ secrets.NEXT_PUBLIC_BASE_URL }}" \
+            --build-arg NEXT_PUBLIC_TEMPO="${{ secrets.NEXT_PUBLIC_TEMPO }}" \
+            -t crm-academy-idearoom:latest .
+        env:
+          DOCKER_BUILDKIT: 1
+
+      - name: Run Docker container
+        run: |
+          docker run -d \
+            --name crm-academy-idearoom \
+            --restart unless-stopped \
+            --network idearoom-network \
+            -p 3001:3001 \
+            -e NODE_ENV=production \
+            -e NEXT_PUBLIC_SUPABASE_URL="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" \
+            -e NEXT_PUBLIC_SUPABASE_ANON_KEY="${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" \
+            -e NEXT_PUBLIC_BASE_URL="${{ secrets.NEXT_PUBLIC_BASE_URL }}" \
+            -e NEXT_PUBLIC_TEMPO="${{ secrets.NEXT_PUBLIC_TEMPO }}" \
+            crm-academy-idearoom:latest
+
+      - name: Verify container is running
+        run: |
+          sleep 5
+          if docker ps | grep -q crm-academy-idearoom; then
+            echo "✅ Container is running"
+            docker logs crm-academy-idearoom --tail 30
+          else
+            echo "❌ Container failed to start"
+            docker ps -a | grep crm-academy-idearoom
+            docker logs crm-academy-idearoom --tail 50 || true
+            exit 1
+          fi
