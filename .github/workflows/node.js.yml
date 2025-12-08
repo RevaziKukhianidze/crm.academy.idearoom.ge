@@ -33,6 +33,14 @@ jobs:
       #     docker --version || (echo "❌ Docker is not installed" && exit 1)
       #     docker info || (echo "❌ Docker daemon is not running" && exit 1)
 
+      - name: Create dedicated admin panel network if it doesn't exist
+        run: |
+          docker network inspect idearoom-admin-network >/dev/null 2>&1 || \
+          docker network create \
+            --driver bridge \
+            --attachable=true \
+            idearoom-admin-network
+
       - name: Stop and remove existing container
         run: |
           docker stop crm-academy-idearoom || true
@@ -55,7 +63,7 @@ jobs:
           docker run -d \
             --name crm-academy-idearoom \
             --restart unless-stopped \
-            --network idearoom-network \
+            --network idearoom-admin-network \
             -p 3001:3001 \
             -e NODE_ENV=production \
             -e NEXT_PUBLIC_SUPABASE_URL="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" \

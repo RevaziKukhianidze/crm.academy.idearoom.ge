@@ -16,9 +16,9 @@ services:
       - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
       - NEXT_PUBLIC_TEMPO=${NEXT_PUBLIC_TEMPO}
     networks:
-      - idearoom-network
+      - idearoom-admin-network
 
 networks:
-  idearoom-network:
+  idearoom-admin-network:
     driver: bridge
 
