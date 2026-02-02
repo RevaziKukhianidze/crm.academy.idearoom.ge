@@ -15,8 +15,13 @@ export async function PUT(
   const supabase = await createAdminClient();
   const id = parseInt(params.id, 10);
 
+  // Check if admin client is actually using service role key
+  const isUsingServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
   console.log(
     `🔧 PUT API: Updating course with ID: ${params.id}, parsed as: ${id}`
+  );
+  console.log(
+    `🔑 PUT API: Admin client using service role key: ${isUsingServiceRole ? "YES ✅" : "NO ❌ (falling back to anon key - RLS may block updates)"}`
   );
 
   // Check if id is valid
@@ -133,6 +138,22 @@ export async function PUT(
       console.log(
         `❌ PUT API: Update returned no data for ID ${id} - this means the course was not found during update`
       );
+      const isUsingServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!isUsingServiceRole) {
+        console.error(
+          `❌ PUT API: CRITICAL - SUPABASE_SERVICE_ROLE_KEY is not set! Admin client is using anon key, which is subject to RLS policies.`
+        );
+        console.error(
+          `❌ PUT API: RLS policies are likely blocking the update operation. Please set SUPABASE_SERVICE_ROLE_KEY environment variable.`
+        );
+        return NextResponse.json(
+          { 
+            error: "Course not found during update. This is likely due to missing SUPABASE_SERVICE_ROLE_KEY environment variable causing RLS policy restrictions.",
+            details: "The admin client is falling back to anon key which cannot bypass Row Level Security policies."
+          },
+          { status: 500 }
+        );
+      }
       console.log(
         `❌ PUT API: This could be RLS policy issue or the course was deleted between checks`
       );

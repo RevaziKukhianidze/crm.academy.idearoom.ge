@@ -22,16 +22,22 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
 # Build Next.js app (with build args for public env vars)
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
-ARG NEXT_PUBLIC_BASE_URL
-ARG NEXT_PUBLIC_TEMPO
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
-ENV NEXT_PUBLIC_TEMPO=$NEXT_PUBLIC_TEMPO
+# Build args are optional - build will work without them
+# Dashboard pages are dynamic and won't prerender during build
+ARG NEXT_PUBLIC_SUPABASE_URL=""
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=""
+ARG NEXT_PUBLIC_BASE_URL=""
+ARG NEXT_PUBLIC_TEMPO=""
+
+# Set environment variables (use empty string if not provided)
+# Empty strings will trigger dummy client creation in supabase/server.ts during build
+ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-""}
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-""}
+ENV NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-""}
+ENV NEXT_PUBLIC_TEMPO=${NEXT_PUBLIC_TEMPO:-""}
 
 # Build Next.js app
+# Dashboard pages are set to dynamic, so they won't prerender even if env vars are missing
 RUN npm run build
 
 # Production image, copy all the files and run next
