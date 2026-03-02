@@ -56,6 +56,10 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy server directory for Server Actions support
+# This is needed for Server Actions to work properly in standalone mode
+COPY --from=builder --chown=nextjs:nodejs /app/.next/server ./.next/server
+
 # Ensure public directory exists (Next.js standalone may include it, but create if missing)
 RUN mkdir -p ./public && chown -R nextjs:nodejs ./public || true
 
