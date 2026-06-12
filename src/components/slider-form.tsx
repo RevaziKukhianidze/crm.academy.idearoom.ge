@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "../../supabase/server";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -14,43 +13,176 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FormMessage as CustomFormMessage } from "@/components/form-message";
-import { SliderItem } from "./slider-table";
-// Import the required packages once they're installed
 import { useForm } from "react-hook-form";
 import { Card, CardContent } from "@/components/ui/card";
-import { Upload, Image as ImageIcon } from "lucide-react";
-import Image from "next/image";
+import { Image as ImageIcon, Link, BookOpen } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { createClient } from "@supabase/supabase-js";
 
-// Define an offered course interface with only the properties we need
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 interface CourseItem {
   id: number;
   title: string;
 }
 
+type LinkType = "course" | "custom";
+
 interface FormValues {
   title: string;
   text: string;
   image: string;
-  course_id: string | null; // Added course_id instead of button_link
-  custom_url: string; // ხელით შეყვანილი URL
+  course_id: string | null;
+  custom_url: string; // manual course-id field (course mode only)
+  link_type: LinkType;
+  external_url: string; // custom slug, e.g. "summer"
 }
 
+// The slider table only has a single `button_link` column — this matches it 1:1.
 interface SliderData {
   title: string | null;
   text: string | null;
   image: string | null;
-  course_id: number | null; // Changed from button_link to course_id
-  custom_url: string | null; // ხელით შეყვანილი URL
+  button_link: string | null;
 }
 
 interface SliderFormProps {
   sliderId?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Supabase browser client
+// ---------------------------------------------------------------------------
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function extractCourseIdFromButtonLink(buttonLink: string | null): string | null {
+  if (!buttonLink) return null;
+  const match = buttonLink.match(/^\/courses\/(\d+)\/?$/);
+  return match ? match[1] : null;
+}
+
+// Anything in button_link that is NOT a clean /courses/{id} link is treated as a
+// custom route. Returns the slug without the leading slash (e.g. "/summer" -> "summer").
+function extractCustomSlugFromButtonLink(buttonLink: string | null): string {
+  if (!buttonLink) return "";
+  if (extractCourseIdFromButtonLink(buttonLink)) return "";
+  return buttonLink.replace(/^\/+/, "");
+}
+
+function findMatchingCourse(title: string, courses: CourseItem[]): CourseItem | null {
+  if (!title.trim()) return null;
+  const lower = title.trim().toLowerCase();
+
+  const exact = courses.find((c) => c.title.trim().toLowerCase() === lower);
+  if (exact) return exact;
+
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/[\s\-_,.]+/g, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const normalised = courses.find((c) => norm(c.title) === norm(title));
+  if (normalised) return normalised;
+
+  const contains = courses.filter(
+    (c) =>
+      c.title.toLowerCase().includes(lower) ||
+      lower.includes(c.title.toLowerCase())
+  );
+  return contains.length === 1 ? contains[0] : null;
+}
+
+// Single source of truth for how a button_link is composed.
+function composeButtonLink({
+  linkType,
+  courseId,
+  slug,
+}: {
+  linkType: LinkType;
+  courseId: number | null;
+  slug: string;
+}): string | null {
+  if (linkType === "course") {
+    return courseId ? `/courses/${courseId}` : null;
+  }
+  const clean = slug.trim().replace(/^\/+/, "");
+  return clean ? `/${clean}` : null;
+}
+
+// ---------------------------------------------------------------------------
+// Link Type Selector sub-component
+// ---------------------------------------------------------------------------
+
+function LinkTypeSelector({
+  value,
+  onChange,
+}: {
+  value: LinkType;
+  onChange: (v: LinkType) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: "6px",
+        padding: "4px",
+        background: "var(--color-n120)",
+        border: "1px solid var(--color-n90)",
+        borderRadius: "8px",
+      }}
+    >
+      {(
+        [
+          { value: "course", label: "კურსი", Icon: BookOpen },
+          { value: "custom", label: "Custom Route", Icon: Link },
+        ] as const
+      ).map(({ value: v, label, Icon }) => {
+        const active = value === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            onClick={() => onChange(v)}
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+              padding: "7px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: active ? 500 : 400,
+              background: active ? "var(--color-n90)" : "transparent",
+              color: active ? "var(--color-white)" : "var(--color-n70)",
+              transition: "all 0.15s",
+            }}
+          >
+            <Icon size={13} strokeWidth={2} />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function SliderForm({ sliderId }: SliderFormProps) {
   const router = useRouter();
+  const isEditMode = !!sliderId;
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -59,357 +191,112 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
   const [base64Image, setBase64Image] = useState<string | null>(null);
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [matchingCourse, setMatchingCourse] = useState<CourseItem | null>(null);
-  const isEditMode = !!sliderId;
 
-  // Initialize form
   const form = useForm<FormValues>({
     defaultValues: {
       title: "",
       text: "",
       image: "",
-      course_id: null, // Initialize as null
-      custom_url: "", // Initialize as an empty string
+      course_id: null,
+      custom_url: "",
+      link_type: "course",
+      external_url: "",
     },
   });
 
-  // Fetch courses to match with slider title
+  const linkType = form.watch("link_type");
+
+  // ---------------------------------------------------------------------------
+  // Fetch courses
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     const fetchCourses = async () => {
-      try {
-        // ✨ შევამოწმოთ თუ SUPABASE_URL და ANON_KEY არსებობს
-        console.log(
-          "NEXT_PUBLIC_SUPABASE_URL არსებობს:",
-          !!process.env.NEXT_PUBLIC_SUPABASE_URL
-        );
-        console.log(
-          "NEXT_PUBLIC_SUPABASE_ANON_KEY არსებობს:",
-          !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        );
+      const { data, error } = await supabase
+        .from("courses")
+        .select("id, title")
+        .order("title", { ascending: true });
 
-        const supabase = await createClient();
-        console.log("✨ იწყება course ცხრილიდან მონაცემების მოთხოვნა...");
-
-        const { data, error } = await supabase
-          .from("courses") // შეცვლილია: offered_course → course
-          .select("id, title")
-          .order("title", { ascending: true });
-
-        if (error) {
-          console.error("Error fetching courses:", error);
-          return;
-        }
-
-        console.log(`✅ მოიძებნა ${data?.length || 0} კურსი:`, data);
-
-        // დამატებითი შემოწმება - გამოვბეჭდოთ ყველა კურსის სახელი და ID
-        if (data && data.length > 0) {
-          console.log("კურსების სია:");
-          data.forEach((course, index) => {
-            console.log(
-              `${index + 1}. ID: ${course.id}, სათაური: "${course.title}"`
-            );
-          });
-        } else {
-          console.log("⚠️ ყურადღება: course ცხრილში კურსები არ მოიძებნა!");
-        }
-
-        setCourses(data || []);
-      } catch (err) {
-        console.error("Error fetching courses:", err);
+      if (!error && Array.isArray(data)) {
+        setCourses(data);
       }
     };
-
     fetchCourses();
   }, []);
 
-  // Watch title changes to update course_id
+  // ---------------------------------------------------------------------------
+  // Auto-match course when title changes
+  // ---------------------------------------------------------------------------
   const currentTitle = form.watch("title");
 
   useEffect(() => {
-    if (currentTitle && currentTitle.trim()) {
-      const trimmedTitle = currentTitle.trim();
-      console.log("ამჟამინდელი სათაური:", trimmedTitle);
-      console.log("სათაურის სიგრძე:", trimmedTitle.length);
-      console.log(
-        "სათაურის კოდი:",
-        Array.from(trimmedTitle).map((c) => c.charCodeAt(0))
-      );
+    if (linkType !== "course") return;
+    const match = findMatchingCourse(currentTitle, courses);
+    setMatchingCourse(match);
+    form.setValue("course_id", match ? String(match.id) : null);
+  }, [currentTitle, courses, linkType]);
 
-      // Log all courses for debugging
-      if (courses.length > 0) {
-        console.log(`მოძიებულია ${courses.length} კურსი შესადარებლად`);
-      } else {
-        console.log(
-          "⚠️ კურსები არ არის ხელმისაწვდომი შესადარებლად. ცხრილი ცარიელია?"
-        );
-      }
-
-      // Log each comparison attempt for debugging
-      let foundMatch = false;
-
-      courses.forEach((course) => {
-        const courseTitle = course.title.toLowerCase();
-        const currentTitleLower = trimmedTitle.toLowerCase();
-
-        console.log(`შედარება: "${currentTitleLower}" === "${courseTitle}"`);
-        console.log(`კურსის სათაურის სიგრძე: ${courseTitle.length}`);
-        console.log(`ჩემი სათაურის სიგრძე: ${currentTitleLower.length}`);
-
-        if (courseTitle === currentTitleLower) {
-          console.log("✅ ზუსტი დამთხვევა!");
-          foundMatch = true;
-        } else {
-          // შევამოწმოთ რატომ არ ემთხვევა
-          const commonLength = Math.min(
-            courseTitle.length,
-            currentTitleLower.length
-          );
-          let firstDifferenceIndex = -1;
-
-          for (let i = 0; i < commonLength; i++) {
-            if (courseTitle[i] !== currentTitleLower[i]) {
-              firstDifferenceIndex = i;
-              break;
-            }
-          }
-
-          if (firstDifferenceIndex >= 0) {
-            console.log(`განსხვავება პოზიციაზე ${firstDifferenceIndex}:`);
-            console.log(
-              `  კურსი: "${courseTitle[firstDifferenceIndex]}" (კოდი: ${courseTitle.charCodeAt(firstDifferenceIndex)})`
-            );
-            console.log(
-              `  ჩემი:  "${currentTitleLower[firstDifferenceIndex]}" (კოდი: ${currentTitleLower.charCodeAt(firstDifferenceIndex)})`
-            );
-          } else if (courseTitle.length !== currentTitleLower.length) {
-            console.log("სიგრძეები განსხვავდება.");
-          }
-        }
-      });
-
-      if (!foundMatch) {
-        console.log("❌ კურსების გადარჩევა დასრულდა, დამთხვევა ვერ მოიძებნა");
-      }
-
-      // Look for exact match (case-insensitive)
-      const matchedCourse = courses.find(
-        (course) =>
-          course.title.trim().toLowerCase() === trimmedTitle.toLowerCase()
-      );
-
-      if (matchedCourse) {
-        console.log("✅ ნაპოვნია ზუსტი დამთხვევა:", matchedCourse);
-        setMatchingCourse(matchedCourse);
-        // Set course_id when we find a match
-        console.log("Setting course_id to:", matchedCourse.id);
-        form.setValue("course_id", String(matchedCourse.id));
-        return; // ვიპოვეთ, გამოვდივართ
-      }
-
-      // თუ ზუსტი დამთხვევა ვერ მოიძებნა, ვცადოთ ალტერნატიული მეთოდები
-      console.log(
-        "👀 ზუსტი დამთხვევა ვერ მოიძებნა, ვცდილობთ ალტერნატიულ მეთოდებს..."
-      );
-
-      // მეთოდი 1: შევამოწმოთ სპეციალური სიმბოლოების გარეშე
-      const normalizedCurrentTitle = trimmedTitle
-        .toLowerCase()
-        .replace(/[\s\-_,.]+/g, "") // Remove spaces, dashes, underscores
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, ""); // Remove diacritics
-
-      for (const course of courses) {
-        const normalizedCourseTitle = course.title
-          .trim()
-          .toLowerCase()
-          .replace(/[\s\-_,.]+/g, "")
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "");
-
-        if (normalizedCourseTitle === normalizedCurrentTitle) {
-          console.log("✅ ნაპოვნია დამთხვევა ნორმალიზებული მეთოდით!");
-          console.log(`  კურსი: "${course.title}" (ID: ${course.id})`);
-
-          setMatchingCourse(course);
-          console.log("Setting course_id to:", course.id);
-          form.setValue("course_id", String(course.id));
-          return; // მოვძებნეთ, გამოვდივართ
-        }
-      }
-
-      // მეთოდი 2: ვეძებთ "შეიცავს" მეთოდით
-      console.log("👀 ვცდილობთ მოძიებას შეიცავს-მეთოდით...");
-
-      const exactMatches = courses.filter(
-        (course) =>
-          course.title
-            .trim()
-            .toLowerCase()
-            .includes(trimmedTitle.toLowerCase()) ||
-          trimmedTitle.toLowerCase().includes(course.title.trim().toLowerCase())
-      );
-
-      if (exactMatches.length === 1) {
-        // მხოლოდ ერთი დამთხვევა
-        const match = exactMatches[0];
-        console.log("✅ ნაპოვნია ერთი დამთხვევა შეიცავს-მეთოდით!");
-        console.log(`  კურსი: "${match.title}" (ID: ${match.id})`);
-
-        setMatchingCourse(match);
-        console.log("Setting course_id to:", match.id);
-        form.setValue("course_id", String(match.id));
-      } else if (exactMatches.length > 1) {
-        // რამდენიმე დამთხვევა
-        console.log(
-          `⚠️ ნაპოვნია ${exactMatches.length} დამთხვევა - ვერ ვადგენთ რომელია სწორი:`
-        );
-        exactMatches.forEach((match, idx) => {
-          console.log(`  ${idx + 1}. "${match.title}" (ID: ${match.id})`);
-        });
-      } else {
-        console.log("❌ ვერც ერთი მეთოდით ვერ მოიძებნა შესაბამისი კურსი");
-        setMatchingCourse(null);
-        // Clear course_id if no match is found
-        form.setValue("course_id", null);
-      }
-    } else {
-      // Clear if title is empty
-      setMatchingCourse(null);
-      form.setValue("course_id", null);
-    }
-  }, [currentTitle, courses, form]);
-
-  // Fetch slider data if in edit mode
+  // ---------------------------------------------------------------------------
+  // Load existing slider in edit mode
+  // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (sliderId && courses.length > 0) {
-      const fetchSliderData = async () => {
-        setLoading(true);
-        try {
-          const response = await fetch(`/api/sliders/${sliderId}`);
+    if (!sliderId || courses.length === 0) return;
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || "Failed to fetch slider data");
-          }
-
-          const data = await response.json();
-          console.log("Fetched slider data:", data);
-
-          if (data) {
-            // Check if there's a button_link that contains a course ID
-            let courseId = null;
-            let customUrlFromButtonLink = null;
-
-            if (data.button_link) {
-              // Handle both old and new formats
-              if (data.button_link.startsWith("/offers/")) {
-                // Old format: /offers/{id}
-                const matches = data.button_link.match(/\/offers\/(\d+)/);
-                if (matches && matches[1]) {
-                  courseId = matches[1];
-                  customUrlFromButtonLink = matches[1]; // ნომერი custom_url ველისთვის
-                  console.log(
-                    "Extracted course ID from old button_link format:",
-                    courseId
-                  );
-                }
-              } else if (data.button_link.startsWith("/offer/")) {
-                // Old format: /offer/{id}
-                const matches = data.button_link.match(/\/offer\/(\d+)/);
-                if (matches && matches[1]) {
-                  courseId = matches[1];
-                  customUrlFromButtonLink = matches[1]; // ნომერი custom_url ველისთვის
-                  console.log(
-                    "Extracted course ID from old button_link format:",
-                    courseId
-                  );
-                }
-              } else if (data.button_link.startsWith("/courses/")) {
-                // New format: /courses/{id}
-                const matches = data.button_link.match(/\/courses\/(\d+)/);
-                if (matches && matches[1]) {
-                  courseId = matches[1];
-                  customUrlFromButtonLink = matches[1]; // ნომერი custom_url ველისთვის
-                  console.log(
-                    "Extracted course ID from button_link:",
-                    courseId
-                  );
-                }
-              }
-            }
-
-            // First reset form with fetched data
-            form.reset({
-              title: data.title || "",
-              text: data.text || "",
-              image: data.image || "",
-              course_id: courseId,
-              custom_url: customUrlFromButtonLink || "", // ახლა custom_url ავსდება button_link-დან
-            });
-
-            if (data.image) {
-              setImagePreview(data.image);
-            }
-
-            // Then explicitly check for a match with the current title
-            if (data.title) {
-              const matchedCourse = courses.find(
-                (course) =>
-                  course.title.toLowerCase() === data.title.toLowerCase()
-              );
-
-              if (matchedCourse) {
-                console.log(
-                  "Found matching course for existing slider:",
-                  matchedCourse
-                );
-                setMatchingCourse(matchedCourse);
-                // ALWAYS update course_id based on matched course
-                console.log(
-                  "Setting course_id for existing slider to:",
-                  matchedCourse.id
-                );
-                form.setValue("course_id", String(matchedCourse.id));
-              } else {
-                console.log(
-                  "No matching course found for existing slider with title:",
-                  data.title
-                );
-                setMatchingCourse(null);
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Error fetching slider:", err);
-          setError("სლაიდერის მონაცემების ჩატვირთვა ვერ მოხერხდა");
-        } finally {
-          setLoading(false);
+    const fetchSliderData = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/sliders/${sliderId}`);
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || "სლაიდერის ჩატვირთვა ვერ მოხერხდა");
         }
-      };
+        const data = await response.json();
 
-      fetchSliderData();
-    }
-  }, [sliderId, form, courses]);
+        // Everything is derived from the single button_link column.
+        const courseId = extractCourseIdFromButtonLink(data.button_link);
+        const customSlug = extractCustomSlugFromButtonLink(data.button_link);
+        const inferredLinkType: LinkType = courseId ? "course" : "custom";
 
-  // Handle manual image URL entry with preview
+        form.reset({
+          title: data.title || "",
+          text: data.text || "",
+          image: data.image || "",
+          course_id: courseId,
+          custom_url: courseId || "", // manual id field, course mode
+          link_type: inferredLinkType,
+          external_url: customSlug, // custom mode slug
+        });
+
+        if (data.image) setImagePreview(data.image);
+
+        if (data.title && inferredLinkType === "course") {
+          const match = findMatchingCourse(data.title, courses);
+          setMatchingCourse(match);
+          if (match) form.setValue("course_id", String(match.id));
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSliderData();
+  }, [sliderId, courses]);
+
+  // ---------------------------------------------------------------------------
+  // Image handlers
+  // ---------------------------------------------------------------------------
   const handleImageUrlChange = (url: string) => {
     form.setValue("image", url);
     setImagePreview(url.trim() !== "" ? url : null);
     setBase64Image(null);
   };
 
-  // Handle direct file upload
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
-    console.log(
-      `File selected: ${file.name}, size: ${(file.size / 1024 / 1024).toFixed(2)}MB`
-    );
+    const file = event.target.files?.[0];
+    if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      // 5MB limit
       setError("ფაილის ზომა არ უნდა აღემატებოდეს 5MB-ს");
       return;
     }
@@ -418,29 +305,14 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
     const reader = new FileReader();
 
     reader.onload = (e) => {
-      if (e.target?.result) {
-        const base64 = e.target.result as string;
-        console.log(
-          `File converted to base64, length: ${base64.length} characters`
-        );
-
-        // If the base64 string is very large, it could cause issues
-        if (base64.length > 1024 * 1024) {
-          // If over 1MB in text form
-          console.warn(
-            "Base64 image is very large, this might cause issues with the database"
-          );
-        }
-
-        setBase64Image(base64);
-        setImagePreview(base64);
-        form.setValue("image", base64);
-        setUploading(false);
-      }
+      const base64 = e.target?.result as string;
+      setBase64Image(base64);
+      setImagePreview(base64);
+      form.setValue("image", base64);
+      setUploading(false);
     };
 
-    reader.onerror = (e) => {
-      console.error("File reader error:", e);
+    reader.onerror = () => {
       setError("ფაილის წაკითხვა ვერ მოხერხდა");
       setUploading(false);
     };
@@ -448,177 +320,85 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
     reader.readAsDataURL(file);
   };
 
+  // ---------------------------------------------------------------------------
+  // Submit
+  // ---------------------------------------------------------------------------
   const onSubmit = async (data: FormValues) => {
     setLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      // ✨ ავტომატური კურსის კავშირის შემოწმება (მხოლოდ ინფორმაციისთვის)
       let finalCourseId: number | null = null;
-      let foundMatch = false;
-      let matchedCourseName = "";
+      let resolvedCourseName = "";
 
-      console.log("🔍 შემოწმება: ავტომატური კურსის კავშირის ანალიზი...");
-
-      if (data.title && data.title.trim()) {
-        const matchedCourse = courses.find(
-          (course) =>
-            course.title.toLowerCase() === data.title.trim().toLowerCase()
-        );
-
-        if (matchedCourse) {
-          finalCourseId = matchedCourse.id;
-          foundMatch = true;
-          matchedCourseName = matchedCourse.title;
-
-          console.log("✅ კურსი ნაპოვნია ავტომატურად:", {
-            title: matchedCourse.title,
-            id: matchedCourse.id,
-            link: `/courses/${matchedCourse.id}`,
-          });
-
-          form.setValue("course_id", String(matchedCourse.id));
-        } else {
-          console.log("❌ სათაურით კურსი ვერ მოიძებნა:", data.title.trim());
-          finalCourseId = null;
-          form.setValue("course_id", null);
+      if (data.link_type === "course") {
+        // Title-match takes priority
+        if (data.title?.trim()) {
+          const match = findMatchingCourse(data.title, courses);
+          if (match) {
+            finalCourseId = match.id;
+            resolvedCourseName = match.title;
+          }
         }
-      } else if (data.course_id) {
-        finalCourseId = parseInt(data.course_id);
 
-        const validCourse = courses.find(
-          (course) => course.id === finalCourseId
-        );
-        if (validCourse) {
-          foundMatch = true;
-          matchedCourseName = validCourse.title;
-          console.log("✅ კურსი ნაპოვნია ID-ით:", {
-            id: finalCourseId,
-            title: validCourse.title,
-          });
-        } else {
-          console.log(
-            "⚠️ გამოყენებული course_id ვერ მოიძებნა ბაზაში:",
-            finalCourseId
-          );
+        // Fall back to manual course ID
+        if (!finalCourseId && data.custom_url?.trim()) {
+          const parsed = parseInt(data.custom_url.trim());
+          if (!isNaN(parsed)) {
+            finalCourseId = parsed;
+            const found = courses.find((c) => c.id === parsed);
+            if (found) resolvedCourseName = found.title;
+          }
         }
       }
 
-      console.log("📋 მონაცემების შემოწმება:", {
-        customUrl: data.custom_url?.trim() || "არ არის",
-        autoMatchedCourse: foundMatch ? matchedCourseName : "არ არის",
+      // Compose the final route — this is what actually gets stored.
+      const buttonLink = composeButtonLink({
+        linkType: data.link_type,
+        courseId: finalCourseId,
+        slug: data.external_url,
       });
 
-      // Create the data object to submit - ორივე ველი (course_id და custom_url) გადაიგზავნება
-      const sliderData: SliderData = {
-        title: data.title.trim() || null,
-        text: data.text.trim() || null,
-        image: data.image.trim() || null,
-        course_id: finalCourseId,
-        custom_url: data.custom_url?.trim() || null, // ახლა მხოლოდ ნომერი გადაიგზავნება
-      };
-
-      // LOG EVERYTHING FOR DEBUGGING
-      console.log("📦 მონაცემები გასაგზავნად:");
-      console.log(JSON.stringify(sliderData, null, 2));
-      console.log("course_id მნიშვნელობა:", sliderData.course_id);
-      console.log("course_id ტიპი:", typeof sliderData.course_id);
-
-      // Make sure at least one field has a non-null value
-      if (!sliderData.title && !sliderData.text && !sliderData.image) {
+      if (!data.title && !data.text && !data.image) {
         setError("გთხოვთ, შეავსოთ მინიმუმ ერთი ველი");
         setLoading(false);
         return;
       }
 
-      let response;
-      const jsonData = JSON.stringify(sliderData);
-      console.log("🚀 საბოლოო მონაცემები სერვერზე გასაგზავნად:", jsonData);
+      const sliderData: SliderData = {
+        title: data.title?.trim() || null,
+        text: data.text?.trim() || null,
+        image: data.image?.trim() || null,
+        button_link: buttonLink,
+      };
 
-      // ✨ წარმატების შემთხვევაში გამოვაჩინოთ URL/კურსის კავშირის ინფორმაცია
-      let successMessage;
-      const hasCustomUrl = data.custom_url?.trim();
-      const hasAutoMatch = foundMatch;
+      const url = isEditMode ? `/api/sliders/${sliderId}` : "/api/sliders";
+      const method = isEditMode ? "PUT" : "POST";
 
-      if (hasCustomUrl && hasAutoMatch) {
-        successMessage = `სლაიდერი ${isEditMode ? "განახლდა" : "შეიქმნა"}. კურსის ID: ${hasCustomUrl} (ასევე ავტომატური კავშირი: "${matchedCourseName}")`;
-      } else if (hasCustomUrl) {
-        successMessage = `სლაიდერი ${isEditMode ? "განახლდა" : "შეიქმნა"} კურსის ID-ით: ${hasCustomUrl}`;
-      } else if (hasAutoMatch) {
-        successMessage = `სლაიდერი ${isEditMode ? "განახლდა" : "შეიქმნა"} და დაკავშირდა კურსთან: "${matchedCourseName}"`;
-      } else {
-        successMessage = isEditMode
-          ? "სლაიდერი წარმატებით განახლდა"
-          : "სლაიდერი წარმატებით შეიქმნა";
-      }
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sliderData),
+      });
 
-      if (isEditMode && sliderId) {
-        console.log(`🔄 მიმდინარეობს სლაიდერის განახლება ID-ით: ${sliderId}`);
-        response = await fetch(`/api/sliders/${sliderId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: jsonData,
-        });
-      } else {
-        console.log("➕ მიმდინარეობს ახალი სლაიდერის შექმნა");
-        response = await fetch("/api/sliders", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: jsonData,
-        });
-      }
-
-      const responseText = await response.text();
-      console.log("📥 API-ის პასუხი:", responseText);
-
-      let result;
-      try {
-        result = JSON.parse(responseText);
-        console.log("📊 API-ის პასუხის მონაცემები:", result);
-
-        // ✨ შევამოწმოთ button_link API-ის პასუხში
-        if (result && result.button_link) {
-          console.log(
-            "✅ API-ის პასუხში button_link დაფიქსირდა:",
-            result.button_link
-          );
-
-          // ვამოწმებთ არის თუ არა სწორი ფორმატი
-          if (result.button_link.startsWith("/courses/")) {
-            console.log("✅ ბმული სწორი ფორმატისაა: ", result.button_link);
-          } else if (
-            result.button_link.startsWith("/offer/") ||
-            result.button_link.startsWith("/offers/")
-          ) {
-            console.log(
-              "⚠️ ბმული ძველი ფორმატისაა, სასურველია განახლდეს: ",
-              result.button_link
-            );
-          }
-        } else {
-          console.log("⚠️ API-ის პასუხში button_link ვერ მოიძებნა!");
-        }
-      } catch (e) {
-        console.error("❌ API-ის პასუხის დამუშავება ვერ მოხერხდა:", e);
-        throw new Error("Unexpected response from server");
-      }
+      const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Operation failed");
+        throw new Error(result.error || "ოპერაცია ვერ შესრულდა");
       }
 
-      if (result.partialSuccess) {
-        setSuccess("სლაიდერი შეიქმნა, მაგრამ სურათის დამატება ვერ მოხერხდა");
-      } else {
-        setSuccess(successMessage);
-      }
+      const action = isEditMode ? "განახლდა" : "შეიქმნა";
+      setSuccess(
+        data.link_type === "course" && resolvedCourseName
+          ? `სლაიდერი ${action} და დაკავშირდა კურსთან: "${resolvedCourseName}"`
+          : data.link_type === "custom" && buttonLink
+            ? `სლაიდერი ${action} — ბმული: ${buttonLink}`
+            : `სლაიდერი წარმატებით ${action}`
+      );
 
-      setTimeout(() => {
-        router.push("/dashboard/sliders");
-      }, 1500);
+      setTimeout(() => router.push("/dashboard/sliders"), 1500);
     } catch (err) {
-      console.error("Error during slider submission:", err);
       setError(
         `დაფიქსირდა შეცდომა: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -627,6 +407,9 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
     <div className="max-w-4xl mx-auto bg-card rounded-lg shadow-sm p-8">
       {error && (
@@ -643,6 +426,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* ── Left column ── */}
             <div className="space-y-6">
               <FormField
                 control={form.control}
@@ -659,14 +443,14 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                         className="h-12"
                       />
                     </FormControl>
-                    {matchingCourse ? (
+                    {linkType === "course" && matchingCourse ? (
                       <p className="text-xs text-green-600 mt-1">
-                        დაკავშირებულია კურსთან: "{matchingCourse.title}" (ID:{" "}
+                        ✓ დაკავშირებულია კურსთან: "{matchingCourse.title}" (ID:{" "}
                         {matchingCourse.id})
                       </p>
-                    ) : currentTitle.trim() ? (
+                    ) : linkType === "course" && currentTitle.trim() ? (
                       <p className="text-xs text-amber-600 mt-1">
-                        არ მოიძებნა კურსი სათაურით: "{currentTitle.trim()}"
+                        სათაურით კურსი ვერ მოიძებნა
                       </p>
                     ) : null}
                     <FormMessage />
@@ -694,38 +478,123 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="custom_url"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-base">
-                      კურსის ID (არასავალდებულო)
-                    </FormLabel>
-                    <FormControl>
-                      <div className="flex items-center">
-                        <span className="px-3 py-2 bg-muted text-muted-foreground border border-r-0 rounded-l-md h-12 flex items-center">
-                          /courses/
-                        </span>
-                        <Input
-                          placeholder="123"
-                          {...field}
-                          className="h-12 rounded-l-none"
-                          type="number"
-                          min="1"
+              {/* ── Link section ── */}
+              <div className="space-y-3">
+                <FormLabel className="text-base">
+                  ბმული (არასავალდებულო)
+                </FormLabel>
+
+                <FormField
+                  control={form.control}
+                  name="link_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <LinkTypeSelector
+                          value={field.value}
+                          onChange={(v) => {
+                            field.onChange(v);
+                            // Clear the opposite field on switch
+                            if (v === "course") {
+                              form.setValue("external_url", "");
+                            } else {
+                              form.setValue("custom_url", "");
+                              setMatchingCourse(null);
+                            }
+                          }}
                         />
-                      </div>
-                    </FormControl>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      შეიყვანეთ მხოლოდ კურსის ID ნომერი. თუ შეავსებთ, ის უფრო
-                      მაღალ პრიორიტეტს ღებულობს ვიდრე ავტომატური კურსის კავშირი
-                    </p>
-                    <FormMessage />
-                  </FormItem>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                {linkType === "course" ? (
+                  <FormField
+                    control={form.control}
+                    name="custom_url"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <div className="flex items-center">
+                            <span
+                              style={{
+                                padding: "0 12px",
+                                height: "48px",
+                                display: "flex",
+                                alignItems: "center",
+                                background: "var(--color-n100)",
+                                border: "1px solid var(--color-n90)",
+                                borderRight: "none",
+                                borderRadius: "6px 0 0 6px",
+                                color: "var(--color-n70)",
+                                fontSize: "13px",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              /courses/
+                            </span>
+                            <Input
+                              placeholder="123"
+                              {...field}
+                              value={field.value ?? ""}
+                              className="h-12 rounded-l-none"
+                              type="number"
+                              min="1"
+                            />
+                          </div>
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          სათაურის ავტო-კავშირი პრიორიტეტულია. ID შეიყვანეთ
+                          მხოლოდ ხელით.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name="external_url"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <div className="flex items-center">
+                            <span
+                              style={{
+                                padding: "0 12px",
+                                height: "48px",
+                                display: "flex",
+                                alignItems: "center",
+                                background: "var(--color-n100)",
+                                border: "1px solid var(--color-n90)",
+                                borderRight: "none",
+                                borderRadius: "6px 0 0 6px",
+                                color: "var(--color-n70)",
+                                fontSize: "13px",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              /
+                            </span>
+                            <Input
+                              placeholder="summer"
+                              {...field}
+                              className="h-12 rounded-l-none"
+                            />
+                          </div>
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          შიდა გვერდის მისამართი — მაგ. summer, promo, sale
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 )}
-              />
+              </div>
             </div>
 
+            {/* ── Right column ── */}
             <div className="space-y-6">
               <FormField
                 control={form.control}
@@ -763,7 +632,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                           ) : (
                             <div className="w-full h-[200px] bg-muted/20 flex flex-col items-center justify-center rounded-md">
                               <ImageIcon className="h-16 w-16 text-muted-foreground/40" />
-                              <p className="text-muted-foreground mt-2">
+                              <p className="text-muted-foreground mt-2 text-sm">
                                 აირჩიეთ ან ატვირთეთ სურათი
                               </p>
                             </div>
@@ -775,7 +644,7 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                               <TabsTrigger value="url">URL ბმული</TabsTrigger>
                             </TabsList>
                             <TabsContent value="upload" className="mt-4">
-                              <div className="space-y-4">
+                              <div className="space-y-2">
                                 <Input
                                   id="image-upload"
                                   type="file"
@@ -785,15 +654,14 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                                   className="cursor-pointer"
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                  მაქსიმალური ზომა: 5MB. მხარდაჭერილი ფორმატები:
-                                  JPG, PNG, GIF
+                                  მაქს. 5MB · JPG, PNG, GIF
                                 </p>
                               </div>
                             </TabsContent>
                             <TabsContent value="url" className="mt-4">
                               <div className="space-y-2">
                                 <Input
-                                  placeholder="შეიყვანეთ სურათის URL"
+                                  placeholder="https://example.com/image.jpg"
                                   value={base64Image ? "" : field.value}
                                   onChange={(e) =>
                                     handleImageUrlChange(e.target.value)
@@ -801,9 +669,6 @@ export default function SliderForm({ sliderId }: SliderFormProps) {
                                   className="h-12"
                                   disabled={uploading}
                                 />
-                                <p className="text-xs text-muted-foreground">
-                                  მაგ: https://example.com/image.jpg
-                                </p>
                               </div>
                             </TabsContent>
                           </Tabs>

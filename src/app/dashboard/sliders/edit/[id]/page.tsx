@@ -1,22 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import DashboardNavbar from "@/components/dashboard-navbar";
 import SliderForm from "@/components/slider-form";
 
-interface EditSliderPageProps {
-  params: {
-    id: string;
-  };
-}
-
-export default function EditSliderPage({ params }: EditSliderPageProps) {
+export default function EditSliderPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const { id } = params;
+  const params = useParams();
+  const id = params.id as string;
 
-  // Authentication check
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     try {
       const isAuthenticated = localStorage.getItem("isAuthenticated");
@@ -25,8 +20,7 @@ export default function EditSliderPage({ params }: EditSliderPageProps) {
       } else {
         setLoading(false);
       }
-    } catch (err) {
-      console.error("localStorage is not available:", err);
+    } catch {
       router.replace("/");
     }
   }, [router]);
@@ -35,15 +29,15 @@ export default function EditSliderPage({ params }: EditSliderPageProps) {
     try {
       localStorage.removeItem("isAuthenticated");
       router.push("/");
-    } catch (err) {
-      console.error("localStorage is not available:", err);
+    } catch {
+      // ignore
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        იტვირთება...
+        <div className="animate-pulse text-muted-foreground">იტვირთება...</div>
       </div>
     );
   }

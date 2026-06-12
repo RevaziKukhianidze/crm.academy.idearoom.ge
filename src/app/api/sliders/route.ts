@@ -4,12 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
 
-  // Get query parameters
   const url = new URL(request.url);
   const id = url.searchParams.get("id");
 
   if (id) {
-    // Get a specific slider
     const { data, error } = await supabase
       .from("slider")
       .select("*")
@@ -22,7 +20,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(data);
   } else {
-    // Get all sliders
     const { data, error } = await supabase
       .from("slider")
       .select("*")
@@ -40,101 +37,11 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient();
 
   try {
-    // Parse the request body
     const body = await request.json();
-    const { title, text, image, course_id, custom_url } = body;
 
-    // Log data for debugging
-    console.log("🔹 API Route: დაიწყო სლაიდერის შექმნა");
-    console.log("📝 სათაური:", title);
-    console.log(
-      "📝 ტექსტი:",
-      text?.substring(0, 30) + (text?.length > 30 ? "..." : "")
-    );
-    console.log("🔢 კურსის ID:", course_id);
-    console.log("🔗 ხელით შეყვანილი URL:", custom_url);
-    console.log("🖼️ სურათი არსებობს:", !!image);
-    console.log("🔢 კურსის ID ტიპი:", typeof course_id);
-    console.log("🔢 კურსის ID მნიშვნელობა:", course_id);
+    // button_link is composed by the form and sent directly — no server-side assembly needed.
+    const { title, text, image, button_link } = body;
 
-    // Create a properly typed structure for inserting
-    const sliderData: {
-      title: string | null;
-      text: string | null;
-      image: string | null;
-      button_link: string | null;
-    } = {
-      title: title || null,
-      text: text || null,
-      image: image || null,
-      button_link: null, // Will be set based on course_id
-    };
-
-    // Set button_link: ორივე ველიდან შეიძლება კურსის ID მივიღოთ
-    if (custom_url && custom_url.trim()) {
-      // ხელით შეყვანილი კურსის ID (/courses/ + ID)
-      const courseIdFromCustom = custom_url.trim();
-      sliderData.button_link = `/courses/${courseIdFromCustom}`;
-      console.log(
-        "✅ button_link დაყენებულია ხელით შეყვანილი კურსის ID-ით:",
-        sliderData.button_link
-      );
-    } else if (course_id !== undefined && course_id !== null) {
-      // თუ custom URL არ არის, ვიყენებთ ავტომატურ კურსის კავშირს
-      const courseIdNum = Number(course_id);
-
-      if (!isNaN(courseIdNum) && courseIdNum > 0) {
-        const buttonLink = `/courses/${courseIdNum}`;
-        console.log(
-          "✅ button_link დაყენებულია კურსის ID-ზე დაყრდნობით:",
-          buttonLink
-        );
-        sliderData.button_link = buttonLink;
-
-        // დამატებითი შემოწმება course ცხრილში
-        try {
-          const { data: courseExists } = await supabase
-            .from("course")
-            .select("id, title")
-            .eq("id", courseIdNum)
-            .single();
-
-          if (courseExists) {
-            console.log(
-              "✅ course_id ვალიდურია, კურსი ნაპოვნია:",
-              courseExists.title
-            );
-          } else {
-            console.log(
-              "⚠️ course_id ვერ მოიძებნა ბაზაში, მაგრამ button_link მაინც დაყენდა"
-            );
-          }
-        } catch (err) {
-          console.log("⚠️ შეცდომა კურსის არსებობის შემოწმებისას:", err);
-        }
-      } else {
-        console.log("⚠️ არავალიდური course_id ფორმატი:", course_id);
-      }
-    } else {
-      console.log(
-        "ℹ️ არც custom_url არ არის არც course_id, button_link იქნება null"
-      );
-    }
-
-    console.log("🔹 საბოლოო მონაცემები ბაზაში შესანახად:", {
-      title: sliderData.title,
-      text: sliderData.text?.substring(0, 20) + "...",
-      button_link: sliderData.button_link,
-    });
-
-    // Output all keys and values for proper debug
-    Object.entries(sliderData).forEach(([key, value]) => {
-      console.log(
-        `${key}: ${value === null ? "null" : typeof value === "string" && value.length > 100 ? value.substring(0, 100) + "..." : value}`
-      );
-    });
-
-    // Make sure at least one field is filled
     if (!title && !text && !image) {
       return NextResponse.json(
         { error: "At least one field must be filled" },
@@ -142,115 +49,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Try to insert with image first if it exists
-    if (image) {
-      try {
-        console.log("API Route: Attempting full insert with image");
-        console.log(
-          "Final data going into database:",
-          JSON.stringify(sliderData, null, 2)
-        );
+    const sliderData = {
+      title: title?.trim() || null,
+      text: text?.trim() || null,
+      image: image || null,
+      button_link: button_link || null,
+    };
 
-        const { data, error } = await supabase
-          .from("slider")
-          .insert([sliderData])
-          .select()
-          .single();
+    const { data, error } = await supabase
+      .from("slider")
+      .insert([sliderData])
+      .select()
+      .single();
 
-        if (error) {
-          console.error("API Route: Error with full insert:", error);
-          throw error;
-        }
-
-        console.log("API Route: Successfully created slider with image");
-        console.log("Saved data from database:", JSON.stringify(data, null, 2));
-        return NextResponse.json(data, { status: 201 });
-      } catch (fullInsertError) {
-        console.error(
-          "API Route: Full insert failed, trying two-step approach"
-        );
-
-        // If that fails, try without image
-        const { image, ...dataWithoutImage } = sliderData;
-
-        // First insert without the image
-        const { data: initialData, error: initialError } = await supabase
-          .from("slider")
-          .insert([dataWithoutImage])
-          .select()
-          .single();
-
-        if (initialError) {
-          console.error("API Route: Error with initial insert:", initialError);
-          return NextResponse.json(
-            { error: initialError.message },
-            { status: 400 }
-          );
-        }
-
-        // Then update with the image
-        const newSliderId = initialData.id;
-
-        // Recheck button_link is included in initialData
-        console.log(
-          "Initial data saved to DB:",
-          JSON.stringify(initialData, null, 2)
-        );
-
-        const { error: updateError } = await supabase
-          .from("slider")
-          .update({ image })
-          .eq("id", newSliderId);
-
-        if (updateError) {
-          console.error("API Route: Error updating with image:", updateError);
-          return NextResponse.json(
-            {
-              partialSuccess: true,
-              error: "Slider created but image couldn't be added",
-              data: initialData,
-            },
-            { status: 207 }
-          );
-        }
-
-        // Get the updated record
-        const { data: updatedData } = await supabase
-          .from("slider")
-          .select("*")
-          .eq("id", newSliderId)
-          .single();
-
-        console.log(
-          "API Route: Successfully created slider with two-step approach"
-        );
-        return NextResponse.json(updatedData, { status: 201 });
-      }
-    } else {
-      // Simple insert without image
-      console.log("API Route: Simple insert without image");
-      console.log(
-        "Final data going into database:",
-        JSON.stringify(sliderData, null, 2)
-      );
-
-      const { data, error } = await supabase
-        .from("slider")
-        .insert([sliderData])
-        .select()
-        .single();
-
-      if (error) {
-        console.error("API Route: Error with simple insert:", error);
-        return NextResponse.json({ error: error.message }, { status: 400 });
-      }
-
-      console.log("API Route: Successfully created slider");
-      console.log("Saved data from database:", JSON.stringify(data, null, 2));
-      return NextResponse.json(data, { status: 201 });
+    if (error) {
+      console.error("Error creating slider:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
+
+    return NextResponse.json(data, { status: 201 });
   } catch (error) {
-    console.error("API Route: Unexpected error:", error);
+    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Server error processing request" },
       { status: 500 }
@@ -261,7 +80,6 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient();
 
-  // Get ID from URL
   const url = new URL(request.url);
   const id = url.searchParams.get("id");
 
@@ -272,12 +90,11 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  // Delete the slider
   const { error } = await supabase.from("slider").delete().eq("id", id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ success: true }, { status: 200 });
+  return NextResponse.json({ success: true });
 }
