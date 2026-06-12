@@ -129,6 +129,16 @@ export default function DashboardNavbar({
               <Sliders className="h-4 w-4 mr-1" />
               სლაიდერი
             </Link>
+            <Link
+              href="/dashboard/summer"
+              className={`text-sm font-medium ${
+                isActive("/dashboard/summer")
+                  ? "text-primary"
+                  : "text-foreground/70 hover:text-primary"
+              } flex items-center gap-1 transition-colors`}
+            >
+              საზაფხულო სკოლა
+            </Link>
           </div>
         </div>
         <div className="flex gap-4 items-center">

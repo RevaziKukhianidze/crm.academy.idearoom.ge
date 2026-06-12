@@ -9,7 +9,6 @@ export default function NewSliderPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
 
-  // Authentication check
   useEffect(() => {
     try {
       const isAuthenticated = localStorage.getItem("isAuthenticated");
@@ -18,8 +17,7 @@ export default function NewSliderPage() {
       } else {
         setLoading(false);
       }
-    } catch (err) {
-      console.error("localStorage is not available:", err);
+    } catch {
       router.replace("/");
     }
   }, [router]);
@@ -28,15 +26,15 @@ export default function NewSliderPage() {
     try {
       localStorage.removeItem("isAuthenticated");
       router.push("/");
-    } catch (err) {
-      console.error("localStorage is not available:", err);
+    } catch {
+      // ignore
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        იტვირთება...
+        <div className="animate-pulse text-muted-foreground">იტვირთება...</div>
       </div>
     );
   }

@@ -15,7 +15,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { createClient } from "../../../../supabase/server";
 
 export default function SlidersPage() {
   const router = useRouter();
@@ -23,9 +22,8 @@ export default function SlidersPage() {
   const [sliderItems, setSliderItems] = useState<SliderItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fetchMethod, setFetchMethod] = useState<string>("direct");
 
-  // Authentication check
+  // Auth check
   useEffect(() => {
     try {
       const isAuthenticated = localStorage.getItem("isAuthenticated");
@@ -34,126 +32,51 @@ export default function SlidersPage() {
       } else {
         setLoading(false);
       }
-    } catch (err) {
-      console.error("localStorage is not available:", err);
+    } catch {
       router.replace("/");
     }
   }, [router]);
 
-  // Fetch data using the selected method
+  // Fetch sliders
   useEffect(() => {
     if (loading) return;
+    fetchSliders();
+  }, [loading, refreshing]);
 
-    const fetchData = async () => {
-      setError(null);
-
-      if (fetchMethod === "api") {
-        await fetchWithApi();
-      } else {
-        await fetchWithSupabase();
-      }
-    };
-
-    fetchData();
-  }, [loading, refreshing, fetchMethod]);
-
-  // API fetch method
-  const fetchWithApi = async () => {
+  const fetchSliders = async () => {
+    setError(null);
     try {
-      console.log("Attempting to fetch sliders via API...");
       const response = await fetch("/api/sliders");
-
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.error || "Failed to fetch slider data from API"
-        );
+        const err = await response.json();
+        throw new Error(err.error || "მონაცემების ჩატვირთვა ვერ მოხერხდა");
       }
-
       const data = await response.json();
-      console.log("Successfully fetched sliders via API:", data);
-
-      if (!Array.isArray(data)) {
-        console.error("API returned non-array data:", data);
-        throw new Error("API returned invalid data format");
-      }
-
+      if (!Array.isArray(data)) throw new Error("სერვერიდან მოვიდა არასწორი ფორმატი");
       setSliderItems(data);
     } catch (err) {
-      console.error("Error fetching slider items via API:", err);
-      setError(
-        `API error: ${err instanceof Error ? err.message : String(err)}`
-      );
-
-      // If API fails, fall back to direct Supabase
-      console.log("API fetch failed, falling back to direct Supabase fetch");
-      setFetchMethod("direct");
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  // Direct Supabase fetch method
-  const fetchWithSupabase = async () => {
-    try {
-      console.log("Attempting to fetch sliders directly from Supabase...");
-      const supabase = await createClient();
-
-      // Get the data with a timeout to prevent hanging
-      const fetchPromise = supabase
-        .from("slider")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      const { data: fetchedSliderItems, error: supabaseError } =
-        await fetchPromise;
-
-      if (supabaseError) {
-        console.error("Supabase error:", supabaseError);
-        throw supabaseError;
-      }
-
-      console.log("Successfully fetched sliders directly:", fetchedSliderItems);
-
-      if (!Array.isArray(fetchedSliderItems)) {
-        console.error("Supabase returned non-array data:", fetchedSliderItems);
-        throw new Error("Supabase returned invalid data format");
-      }
-
-      setSliderItems(fetchedSliderItems);
-    } catch (err) {
-      console.error("Error fetching data directly from Supabase:", err);
-      setError(
-        `Direct DB error: ${err instanceof Error ? err.message : String(err)}`
-      );
+      setError(err instanceof Error ? err.message : String(err));
       setSliderItems([]);
     } finally {
       setRefreshing(false);
     }
   };
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-  };
-
-  const handleToggleFetchMethod = () => {
-    setFetchMethod((prev) => (prev === "api" ? "direct" : "api"));
-    setRefreshing(true);
-  };
+  const handleRefresh = () => setRefreshing(true);
 
   const handleLogout = () => {
     try {
       localStorage.removeItem("isAuthenticated");
       router.push("/");
-    } catch (err) {
-      console.error("localStorage is not available:", err);
+    } catch {
+      // ignore
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">იტვირთება...</div>
+        <div className="animate-pulse text-muted-foreground">იტვირთება...</div>
       </div>
     );
   }
@@ -163,7 +86,6 @@ export default function SlidersPage() {
       <DashboardNavbar handleLogOut={handleLogout} />
       <main className="w-full bg-slate-50/40 dark:bg-slate-950/40 min-h-[calc(100vh-4rem)]">
         <div className="container mx-auto px-4 py-8">
-          {/* Slider Management Section */}
           <Card className="border-none shadow-md">
             <CardHeader className="pb-4">
               <div className="flex justify-between items-center">
@@ -202,7 +124,6 @@ export default function SlidersPage() {
                   {error}
                 </div>
               )}
-
               <SliderTable initialSliderItems={sliderItems} />
             </CardContent>
           </Card>
